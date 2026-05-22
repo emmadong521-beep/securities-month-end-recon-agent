@@ -2,31 +2,30 @@
 
 中文名：证券公司月结差异归因 Agent
 
-本项目模拟证券公司月结期间，经纪业务佣金收入、收入子账、总账凭证、费用分摊结果之间的差异识别与根因归因。项目一的定位是“先保证月结数据准确、可追溯”，项目二再基于可信月结数据做管理会计分析。
+本项目是证券行业财务 AI 应用 PoC，模拟证券公司月结期间经纪业务佣金收入、收入子账、总账凭证、总账余额和费用分摊结果之间的差异识别、证据链穿透和根因归因。项目一用于保证月结数据准确、可追溯；项目二可基于可信月结数据开展管理会计分析和经营决策支持。
 
 ## 数据来源说明
 
-审计报告路径通过 `.env` 的 `AUDIT_REPORT_PATH` 配置，默认指向：
+审计报告路径通过 `.env` 的 `AUDIT_REPORT_PATH` 配置：
 
-`/Users/dongkaixin/Downloads/财务agent项目/管理会计多维盈利分析/长江证券2025年审计财报.pdf`
+```bash
+cp .env.example .env
+# 在 .env 中配置 AUDIT_REPORT_PATH=/path/to/your/audit_report.pdf
+```
 
-PDF 不会提交到仓库。`src/load_audit_report.py` 会尝试解析公开披露汇总指标，解析失败时使用 `data/raw/audit_report_metrics_template.yaml` 和代码内置的公开汇总口径 fallback。明细交易、客户、凭证、营业部、费用分摊数据全部为合成测试数据。
+PDF 不会提交到仓库。`src/load_audit_report.py` 会尝试解析公开披露汇总指标，解析失败时使用 `data/raw/audit_report_metrics_template.yaml` 和代码内置 fallback。客户、交易、凭证、营业部、费用池和分摊结果均为合成数据。
 
-本项目仅用于个人学习和求职作品集。项目使用公开披露数据进行规模校准，明细数据均为合成数据，不代表长江证券真实客户、交易、凭证、营业部或内部经营数据，不包含任何未公开重大信息、客户隐私数据或商业秘密，不构成投资建议。
+本项目仅用于个人研究型 PoC。项目使用公开披露数据进行规模校准，明细数据均为合成数据，不代表长江证券真实客户、交易、凭证、营业部或内部经营数据，不包含任何未公开重大信息、客户隐私数据或商业秘密，不构成投资建议。
 
 ## 业务场景
 
 1. 经纪业务佣金收入上游系统与总账差异归因：`trade_flow -> commission_calc -> revenue_subledger -> gl_journal -> gl_balance`
 2. 营业部 / 业务线费用分摊结果准确性比对：`expense_pool -> allocation_rule -> allocation_driver -> allocation_result`
-
-## 审计报告校准口径
-
-造数使用审计报告公开披露的 2025 年营业总收入、手续费及佣金净收入、代理买卖证券业务收入、业务及管理费等汇总金额做规模校准。所有明细行均为按证券公司业务逻辑构造的合成数据。
+3. 异常证据链：按异常编号穿透交易、佣金、子账、总账或费用池、规则、因子、分摊结果。
 
 ## 运行方式
 
 ```bash
-cd /Users/dongkaixin/Downloads/财务agent项目/securities-month-end-recon-agent
 python3.11 -m venv .venv
 .venv/bin/python -m pip install -e .
 .venv/bin/python -m src.seed_data
@@ -34,6 +33,19 @@ python3.11 -m venv .venv
 .venv/bin/python -m pytest
 .venv/bin/streamlit run src/app.py
 ```
+
+## 数据质量检查
+
+```bash
+.venv/bin/python -m src.data_quality
+```
+
+输出文件：
+
+- `data/output/data_quality_report.md`
+- `data/output/data_quality_report.json`
+
+检查内容包括核心表行数、主键唯一性、外键完整性、关键金额空值、金额勾稽、异常案例埋入与检测、公开汇总指标规模校准和 PASS / WARNING / FAIL 结论。
 
 ## 主要表
 
@@ -51,15 +63,10 @@ python3.11 -m venv .venv
 
 ## Demo 截图占位
 
-面试展示时可在启动 Streamlit 后截取：月结批次概览、经纪佣金勾稽、费用分摊检查、异常详情、mock 归因报告五张图。
-
-## 简历写法建议
-
-- 构建证券公司月结差异归因 Agent PoC，基于公开审计报告汇总口径校准合成数据，打通交易流水、佣金计算、收入子账、总账凭证和费用分摊链路。
-- 设计 DuckDB + pandas 的可追溯勾稽引擎，内置缺批次、少入账、重复凭证、科目映射错误、分摊比例不平等异常，并生成证据链归因报告。
+可在启动 Streamlit 后截取：月结批次概览、经纪佣金勾稽、费用分摊检查、异常清单、异常证据链和 mock 归因报告页面。
 
 ## 后续扩展方向
 
-- 接入真实企业数据脱敏样例或数据质量平台
+- 接入脱敏后的企业数据样例或数据质量平台
 - 增加凭证冲销、重跑批次、审批流模拟
 - 接入 LLM API，但保持金额由规则和 SQL 计算，模型只负责表达

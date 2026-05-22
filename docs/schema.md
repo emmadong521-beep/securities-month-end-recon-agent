@@ -16,3 +16,8 @@
 - interface_batch_log：接口批次日志。
 - reconciliation_exception：差异异常清单。
 - root_cause_case：历史异常案例库。
+
+## 输出报告
+
+- data_quality_report：由 `python -m src.data_quality` 生成，包含行数、主键、外键、金额空值、金额勾稽、异常埋入与检测、公开指标校准和检查结论。
+- evidence_chain：由 `src/evidence_chain.py` 动态生成，按异常编号展示收入链路或费用分摊链路的逐层证据。
