@@ -198,8 +198,21 @@ def detect_reconciliation_exceptions(period: str) -> pd.DataFrame:
 
 
 def _all_exceptions() -> pd.DataFrame:
+    return detect_all_reconciliation_exceptions()
+
+
+def detect_all_reconciliation_exceptions() -> pd.DataFrame:
     frames = [detect_reconciliation_exceptions(f"2025-{m:02d}") for m in range(1, 13)]
-    return pd.concat(frames, ignore_index=True)
+    df = pd.concat(frames, ignore_index=True)
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    df.to_csv(OUTPUT_DIR / "reconciliation_exceptions_all.csv", index=False)
+    if Path(DB_PATH).exists():
+        con = duckdb.connect(str(DB_PATH))
+        try:
+            con.execute("CREATE OR REPLACE TABLE reconciliation_exception AS SELECT * FROM df")
+        finally:
+            con.close()
+    return df
 
 
 def explain_exception_mock(exception_id: str) -> str:

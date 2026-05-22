@@ -18,9 +18,12 @@ def init_duckdb(db_path: str | Path = DB_PATH) -> Path:
             csv_path = SYNTHETIC_DIR / f"{table}.csv"
             if csv_path.exists():
                 con.execute(f"CREATE OR REPLACE TABLE {table} AS SELECT * FROM read_csv_auto(?, header=True)", [str(csv_path)])
-        return db_path
     finally:
         con.close()
+    from .validation import detect_all_reconciliation_exceptions
+
+    detect_all_reconciliation_exceptions()
+    return db_path
 
 
 def load_synthetic_data_to_duckdb(db_path: str | Path = DB_PATH) -> Path:
