@@ -223,8 +223,8 @@ def explain_exception_mock(exception_id: str) -> str:
     r = match.iloc[0]
     return (
         f"异常 {r['exception_id']} 属于 {r['scenario']} / {r['exception_type']}。"
-        f"源表金额 {r['source_amount']:,.2f} 元，目标表金额 {r['target_amount']:,.2f} 元，"
-        f"差异 {r['diff_amount']:,.2f} 元。初步原因：{r['suspected_reason']}。"
+        f"源表金额 {float(r['source_amount']) / 10000:,.2f} 万元，目标表金额 {float(r['target_amount']) / 10000:,.2f} 万元，"
+        f"差异 {float(r['diff_amount']) / 10000:,.2f} 万元。初步原因：{r['suspected_reason']}。"
     )
 
 
@@ -250,11 +250,11 @@ def generate_root_cause_report(exception_id: str) -> str:
 ## 异常金额
 期间：{r['period']}
 
-源表金额：{r['source_amount']:,.2f} 元
+源表金额：{float(r['source_amount']) / 10000:,.2f} 万元
 
-目标表金额：{r['target_amount']:,.2f} 元
+目标表金额：{float(r['target_amount']) / 10000:,.2f} 万元
 
-差异金额：{r['diff_amount']:,.2f} 元
+差异金额：{float(r['diff_amount']) / 10000:,.2f} 万元
 
 ## 差异原因
 {root_cause}
@@ -265,3 +265,10 @@ def generate_root_cause_report(exception_id: str) -> str:
 ## 建议动作
 {action}
 """
+
+
+def export_root_cause_report(exception_id: str) -> Path:
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    output_path = OUTPUT_DIR / f"root_cause_report_{exception_id}.md"
+    output_path.write_text(generate_root_cause_report(exception_id), encoding="utf-8")
+    return output_path

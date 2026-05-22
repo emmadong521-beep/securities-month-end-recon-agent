@@ -223,7 +223,7 @@ def build_evidence_chain(exception_id: str) -> dict[str, Any]:
 def format_evidence_chain_markdown(exception_id: str) -> str:
     chain = build_evidence_chain(exception_id)
     rows = "\n".join(
-        f"| {s['step']} | {s['layer']} | {s['description']} | {s['record_count']} | {s['amount']:,.2f} | {', '.join(s['key_ids'])} |"
+        f"| {s['step']} | {s['layer']} | {s['description']} | {s['record_count']} | {s['amount'] / 10000:,.2f} | {', '.join(s['key_ids'])} |"
         for s in chain["trace_steps"]
     )
     return f"""# 异常证据链
@@ -236,11 +236,11 @@ def format_evidence_chain_markdown(exception_id: str) -> str:
 
 异常类型：{chain['exception_type']}
 
-差异金额：{chain['diff_amount']:,.2f} 元
+差异金额：{chain['diff_amount'] / 10000:,.2f} 万元
 
 追踪键：{chain['trace_key']}
 
-| 步骤 | 层级 | 说明 | 记录数 | 金额 | 关键ID |
+| 步骤 | 层级 | 说明 | 记录数 | 金额（万元） | 关键ID |
 |---:|---|---|---:|---:|---|
 {rows}
 

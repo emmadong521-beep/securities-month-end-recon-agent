@@ -2,6 +2,7 @@ from src.db import load_synthetic_data_to_duckdb
 from src.seed_data import generate_synthetic_data
 from src.validation import (
     detect_reconciliation_exceptions,
+    export_root_cause_report,
     generate_root_cause_report,
     reconcile_allocation_result,
     reconcile_commission_to_gl,
@@ -53,3 +54,10 @@ def test_root_cause_report_contains_required_sections():
     assert "差异原因" in report
     assert "证据链" in report
     assert "建议动作" in report
+
+
+def test_root_cause_report_can_be_exported():
+    exceptions = detect_reconciliation_exceptions("2025-03")
+    output_path = export_root_cause_report(exceptions.iloc[0]["exception_id"])
+    assert output_path.exists()
+    assert output_path.name.startswith("root_cause_report_")
