@@ -4,6 +4,7 @@ __pycache__/
 .streamlit/
 .env
 *.pyc
+*.egg-info/
 *.duckdb
 *.duckdb.wal
 data/output/*
