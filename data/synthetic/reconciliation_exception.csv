@@ -1,0 +1,1 @@
+exception_id,period,scenario,exception_type,severity,source_table,target_table,source_amount,target_amount,diff_amount,diff_rate,suspected_reason,status

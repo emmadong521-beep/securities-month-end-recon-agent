@@ -1,0 +1,16 @@
+Metadata-Version: 2.4
+Name: securities-month-end-recon-agent
+Version: 0.1.0
+Summary: 证券公司月结差异归因 Agent
+Requires-Python: >=3.11
+Requires-Dist: pandas>=2.2.0
+Requires-Dist: numpy>=1.26.0
+Requires-Dist: duckdb>=1.0.0
+Requires-Dist: openpyxl>=3.1.0
+Requires-Dist: pydantic>=2.7.0
+Requires-Dist: pytest>=8.0.0
+Requires-Dist: streamlit>=1.35.0
+Requires-Dist: plotly>=5.22.0
+Requires-Dist: python-dotenv>=1.0.0
+Requires-Dist: PyYAML>=6.0.0
+Requires-Dist: pypdf>=4.2.0

@@ -1,0 +1,8 @@
+case_id,scenario,exception_type,symptom,root_cause,evidence_pattern,recommended_action
+RC001,COMMISSION_TO_GL,UPSTREAM_SUBLEDGER_DIFF,交易流水佣金汇总大于收入子账,营业部或接口批次未进入收入确认,commission_calc 有金额，revenue_subledger 无对应 recognition_batch_id,重跑收入确认批次并锁定批次幂等键
+RC002,COMMISSION_TO_GL,SUBLEDGER_GL_SHORT_POSTING,收入子账金额等于业务系统金额但总账少入账,凭证生成失败或接口批次失败,subledger 有金额，gl_journal 对应 batch_id 少于子账,补生成凭证并核对接口日志失败原因
+RC003,COMMISSION_TO_GL,SUBLEDGER_GL_DUPLICATE_POSTING,总账金额高于收入子账,重复推送凭证批次,gl_journal 同 batch_id 金额大于子账且存在重复描述,冲销重复凭证并增加批次幂等校验
+RC004,COMMISSION_TO_GL,ACCOUNT_MAPPING_ERROR,财富管理收入误入经纪佣金科目,科目映射配置错误,biz_line_id=WEALTH 但 account_code=6021,修正映射到6022并重分类凭证
+RC005,ALLOCATION,ALLOCATION_NOT_FULLY_DISTRIBUTED,费用池分摊结果小于费用池金额,分摊比例合计小于100%,allocation_ratio sum < 1,补足分摊因子后重跑分摊
+RC006,ALLOCATION,WRONG_RULE_VERSION,本月使用过期分摊规则,规则版本切换失败,allocation_result.rule_id 指向 is_active=False,切换到V2规则并重算分摊结果
+RC007,ALLOCATION,MISSING_ALLOCATION_DRIVER,部分营业部缺少分摊因子,交易笔数或客户数等驱动数据缺失,driver target 数小于活跃营业部数,补齐驱动数据并设置缺失值预警

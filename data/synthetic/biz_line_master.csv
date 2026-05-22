@@ -1,0 +1,8 @@
+biz_line_id,biz_line_name,description
+BROKERAGE,经纪业务,代理买卖证券及交易单元收入
+IB,投行业务,承销保荐和财务顾问
+ASSET_MGMT,资产管理,集合资管和基金管理
+PROPRIETARY,自营投资,投资收益和公允价值变动
+MARGIN,信用业务,融资融券利息收入
+WEALTH,财富管理,代销金融产品和投顾
+HQ,总部管理,管理与共享服务
