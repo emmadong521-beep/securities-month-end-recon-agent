@@ -66,14 +66,19 @@ def check_required_headings(relative_path: str, headings: list[str]) -> None:
 
 def check_readme() -> None:
     lines = read_lines("README.md")
+    text = read_text("README.md")
     if len(lines) < 80:
         fail("README.md must have at least 80 lines")
     if lines[0] != "# Securities Month-End Reconciliation Agent":
         fail("README.md first line must be the project title")
     if "```mermaid" not in lines:
         fail("README.md must contain an independent ```mermaid fence line")
+    if "```mermaid flowchart" in text:
+        fail("README.md must not combine mermaid fence and flowchart on one line")
+    if any(line.startswith("    flowchart LR") or line.startswith("    flowchart TD") for line in lines):
+        fail("README.md must not indent flowchart LR/TD as a normal code block")
     if "| Metric | Value |" not in lines:
-        fail("README.md must contain a multi-line Key Metrics table")
+        fail("README.md must contain | Metric | Value | as an independent line")
     check_required_headings(
         "README.md",
         [
@@ -98,8 +103,10 @@ def check_workflow() -> None:
         fail(".github/workflows/tests.yml must have at least 40 lines")
     if lines[0] != "name: tests":
         fail(".github/workflows/tests.yml must start with 'name: tests'")
-    if not any(line.startswith("  tests:") for line in lines):
-        fail(".github/workflows/tests.yml must define a tests job")
+    if "jobs:" not in lines:
+        fail(".github/workflows/tests.yml must contain jobs: as an independent line")
+    if "  tests:" not in lines:
+        fail(".github/workflows/tests.yml must contain indented tests: under jobs:")
     if not any("uses: actions/checkout@v4" in line for line in lines):
         fail(".github/workflows/tests.yml must use actions/checkout@v4")
     if yaml is not None:
@@ -115,9 +122,21 @@ def check_workflow() -> None:
     check_no_forbidden_chars(".github/workflows/tests.yml")
 
 
+def check_capability_boundary() -> None:
+    lines = read_lines("docs/CAPABILITY_BOUNDARY.md")
+    header = "| Dimension | Traditional finance systems | BI / dashboards | LLM-only tools | This PoC |"
+    if header not in lines:
+        fail("docs/CAPABILITY_BOUNDARY.md must contain the Capability Comparison table header as an independent line")
+    if "|---|---|---|---|---|" not in lines:
+        fail("docs/CAPABILITY_BOUNDARY.md must contain the Markdown table separator as an independent line")
+    check_no_long_lines("docs/CAPABILITY_BOUNDARY.md")
+    check_no_forbidden_chars("docs/CAPABILITY_BOUNDARY.md")
+
+
 def main() -> None:
     check_readme()
     check_workflow()
+    check_capability_boundary()
     check_min_lines("docs/DESIGN_DECISIONS.md", 30)
     check_min_lines("docs/TESTING_AND_QUALITY.md", 30)
     check_no_long_lines("docs/DESIGN_DECISIONS.md")

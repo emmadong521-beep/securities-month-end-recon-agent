@@ -2,9 +2,7 @@
 
 ## Positioning
 
-This project focuses on securities month-end reconciliation, evidence-chain
-tracing, exception severity grading, similar case matching, and root-cause
-reporting.
+This project focuses on securities month-end reconciliation, evidence-chain tracing, exception severity grading, similar case matching, and root-cause reporting.
 
 ## Capability Comparison
 
@@ -24,4 +22,3 @@ reporting.
 - No production finance-system integration.
 - Case matching is deterministic scoring, not a full vector RAG system.
 - LLM enhances task understanding and explanation only.
-
