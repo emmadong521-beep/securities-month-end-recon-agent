@@ -259,7 +259,7 @@ def run_month_end_agent(
                 task_context["exception_id"] = exception_id
                 task_context["intent"] = "exception_root_cause"
         except Exception as exc:
-            llm_error = f"LLM 任务解析失败，已回退 Mock Agent：{type(exc).__name__}"
+            llm_error = f"LLM 任务解析失败，已回退 Mock Agent：{exc}"
             llm_mode = "Mock Agent"
 
     selected_period = str(task_context.get("period") or _extract_period(user_task, period))
@@ -270,7 +270,7 @@ def run_month_end_agent(
         try:
             plan = generate_month_end_plan_with_llm(task_context)
         except Exception as exc:
-            llm_error = f"LLM 计划生成失败，已使用 Mock 计划：{type(exc).__name__}"
+            llm_error = f"LLM 计划生成失败，已使用 Mock 计划：{exc}"
 
     steps: list[AgentStep] = []
     evidence_chain: dict | None = None
@@ -348,7 +348,7 @@ def run_month_end_agent(
         try:
             final = generate_month_end_final_answer_with_llm(user_task, plan, steps, evidence_chain, mock_final)
         except Exception as exc:
-            llm_error = f"LLM 结论生成失败，已展示 Mock 结果：{type(exc).__name__}"
+            llm_error = f"LLM 结论生成失败，已展示 Mock 结果：{exc}"
             llm_mode = "Mock Agent"
             final = mock_final
     return AgentResult(user_task, plan, steps, final, evidence_chain, report_path, llm_mode, llm_error)

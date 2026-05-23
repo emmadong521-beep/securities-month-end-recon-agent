@@ -13,7 +13,7 @@ import plotly.express as px
 from src.agent import answer_month_end_followup, run_month_end_agent
 from src.db import load_synthetic_data_to_duckdb
 from src.evidence_chain import build_evidence_chain, format_evidence_chain_markdown
-from src.llm_client import is_llm_available, load_llm_config
+from src.llm_client import explain_llm_config_status, is_llm_available, load_llm_config
 from src.validation import (
     detect_reconciliation_exceptions,
     explain_exception_mock,
@@ -91,12 +91,27 @@ def _recommended_demo_path() -> None:
 
 
 def _llm_status_text(use_llm: bool) -> str:
-    config = load_llm_config()
-    if use_llm and is_llm_available():
+    status = explain_llm_config_status()
+    if use_llm and status["available"]:
         return "当前模式：Volcengine Ark LLM Agent"
-    if use_llm and config.enabled and not is_llm_available():
+    if use_llm and not status["available"]:
         return "当前模式：LLM 配置不完整，已回退 Mock Agent"
     return "当前模式：Mock Agent"
+
+
+def _show_llm_config_status() -> None:
+    status = explain_llm_config_status()
+    display_status = {
+        "mode": status["mode"],
+        "provider": status["provider"],
+        "base_url": status["base_url"],
+        "model": status["model"],
+        "missing_fields": status["missing_fields"],
+        "message": status["message"],
+        "api_key": "已配置" if status.get("api_key_configured") else "未配置",
+    }
+    with st.expander("LLM 配置状态"):
+        st.json(display_status)
 
 if page == "月结批次概览":
     _recommended_demo_path()
@@ -207,6 +222,7 @@ else:
     llm_config = load_llm_config()
     use_llm = st.checkbox("使用 LLM 增强回答", value=llm_config.enabled)
     st.info(_llm_status_text(use_llm))
+    _show_llm_config_status()
     if use_llm and is_llm_available():
         st.caption(f"当前模型：{llm_config.model}")
     elif use_llm and llm_config.enabled:

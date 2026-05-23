@@ -9,7 +9,7 @@ def setup_module():
 
 
 def test_run_month_end_agent_returns_result():
-    result = run_month_end_agent("请分析 2025-03 经纪佣金收入差异最大的异常，并定位根因。")
+    result = run_month_end_agent("请分析 2025-03 经纪佣金收入差异最大的异常，并定位根因。", use_llm=False)
     assert isinstance(result, AgentResult)
     assert result.plan
     assert result.steps
@@ -17,16 +17,16 @@ def test_run_month_end_agent_returns_result():
 
 
 def test_agent_steps_include_core_tools():
-    result = run_month_end_agent("请分析异常 EXC_202503_001 的根因。")
+    result = run_month_end_agent("请分析异常 EXC_202503_001 的根因。", use_llm=False)
     tool_names = {step.tool_name for step in result.steps}
     assert "build_evidence_chain" in tool_names
     assert "generate_root_cause_report" in tool_names
 
 
 def test_agent_followup_answers_amount_and_action():
-    result = run_month_end_agent("请检查 2025-06 费用分摊异常，说明差异发生在哪个环节。")
-    amount_answer = answer_month_end_followup("影响金额是多少？", result)
-    action_answer = answer_month_end_followup("建议动作是什么？", result)
+    result = run_month_end_agent("请检查 2025-06 费用分摊异常，说明差异发生在哪个环节。", use_llm=False)
+    amount_answer = answer_month_end_followup("影响金额是多少？", result, use_llm=False)
+    action_answer = answer_month_end_followup("建议动作是什么？", result, use_llm=False)
     assert "万元" in amount_answer
     assert "建议动作" in action_answer
 

@@ -75,8 +75,8 @@ cp .env.example .env
 LLM_ENABLED=true
 LLM_PROVIDER=volcengine
 ARK_API_KEY=your_ark_api_key_here
-ARK_BASE_URL=https://ark.cn-beijing.volces.com/api/v3
-ARK_MODEL=your_model_id_here
+ARK_BASE_URL=https://ark.cn-beijing.volces.com/api/coding/v3
+ARK_MODEL=your_model_or_endpoint_id_here
 LLM_TEMPERATURE=0.2
 LLM_TIMEOUT_SECONDS=60
 ```
