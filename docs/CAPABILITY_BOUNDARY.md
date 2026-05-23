@@ -10,7 +10,7 @@ This project focuses on securities month-end reconciliation, evidence-chain trac
 |---|---|---|---|---|
 | Data processing | Structured workflows and configured rules | Visualizes prepared data | No reliable data processing by itself | Synthetic month-end chain with deterministic checks |
 | Exception detection | Rule-based checks | Usually requires precomputed flags | May hallucinate if not grounded | Deterministic reconciliation and allocation checks |
-| Root-cause analysis | Users inspect tables and logs | Drilldown depends on prepared model | Can explain text but lacks traceability | Evidence-chain tracing and case matching |
+| Root-cause analysis | Users inspect tables and logs | Drilldown depends on prepared model | Can explain text but lacks traceability | Evidence-chain tracing plus case matching |
 | Financial calculation | Deterministic | Deterministic if modeled | Not reliable for calculation | Always local deterministic code |
 | Interaction | Menu-driven | Filter and chart driven | Natural language | Natural language task plus visible tool trace |
 | Auditability | High in production systems | Medium to high | Low if ungrounded | Traceable to synthetic data tables and tools |
