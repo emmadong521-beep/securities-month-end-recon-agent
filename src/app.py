@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import asdict
 import sys
 from pathlib import Path
 
@@ -9,6 +10,7 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 
+from src.agent import answer_month_end_followup, run_month_end_agent
 from src.db import load_synthetic_data_to_duckdb
 from src.evidence_chain import build_evidence_chain, format_evidence_chain_markdown
 from src.validation import (
@@ -28,7 +30,7 @@ load_synthetic_data_to_duckdb()
 period = st.sidebar.selectbox("会计期间", [f"2025-{m:02d}" for m in range(1, 13)], index=2)
 page = st.sidebar.radio(
     "功能",
-    ["月结批次概览", "经纪佣金收入勾稽检查", "费用分摊准确性检查", "异常清单", "异常详情", "异常证据链", "AI / mock 归因报告"],
+    ["月结批次概览", "经纪佣金收入勾稽检查", "费用分摊准确性检查", "异常清单", "异常详情", "异常证据链", "AI / mock 归因报告", "Agent 工作台"],
 )
 
 exceptions = detect_reconciliation_exceptions(period)
@@ -62,6 +64,15 @@ def _trace_steps_view(trace_steps: list[dict]) -> pd.DataFrame:
         out["amount"] = out["amount"].astype(float) / 10000
         out = out.rename(columns={"amount": "amount（万元）"})
     return out
+
+
+def _agent_steps_view(result) -> pd.DataFrame:
+    rows = []
+    for step in result.steps:
+        row = asdict(step)
+        row["tool_input"] = str(row["tool_input"])
+        rows.append(row)
+    return pd.DataFrame(rows)
 
 
 def _recommended_demo_path() -> None:
@@ -169,7 +180,7 @@ elif page == "异常证据链":
         with st.expander("Markdown 证据链"):
             st.markdown(format_evidence_chain_markdown(exception_id))
 
-else:
+elif page == "AI / mock 归因报告":
     if exceptions.empty:
         st.info("本期间未检测到异常。")
     else:
@@ -179,3 +190,48 @@ else:
         if st.button("导出 Markdown 归因报告"):
             output_path = export_root_cause_report(exception_id)
             st.success(f"已导出：{output_path}")
+
+else:
+    st.subheader("Agent 工作台")
+    st.caption("输入自然语言任务，Agent 会自动规划分析步骤、调用现有校验与证据链工具，并展示可追溯的观察结果。")
+    default_task = f"请分析 {period} 经纪佣金收入差异最大的异常，并定位根因。"
+    user_task = st.text_area("自然语言任务", value=default_task, height=100)
+    col1, col2 = st.columns(2)
+    agent_period = col1.selectbox("Agent 分析期间", [f"2025-{m:02d}" for m in range(1, 13)], index=int(period[-2:]) - 1)
+    exception_options = ["自动识别"]
+    if not exceptions.empty:
+        exception_options.extend(exceptions["exception_id"].tolist())
+    selected_exception = col2.selectbox("异常编号（可选）", exception_options)
+    exception_arg = None if selected_exception == "自动识别" else selected_exception
+
+    if st.button("运行 Agent"):
+        st.session_state["month_end_agent_result"] = run_month_end_agent(user_task, agent_period, exception_arg)
+
+    result = st.session_state.get("month_end_agent_result")
+    if result:
+        st.subheader("Agent 分析计划")
+        for idx, item in enumerate(result.plan, start=1):
+            st.markdown(f"{idx}. {item}")
+
+        st.subheader("工具调用轨迹")
+        st.dataframe(_agent_steps_view(result), width="stretch")
+
+        st.subheader("每一步观察结果")
+        for step in result.steps:
+            with st.expander(f"步骤 {step.step_no}：{step.tool_name}"):
+                st.markdown(f"**规划意图：** {step.thought}")
+                st.json(step.tool_input)
+                st.write(step.observation)
+
+        with st.container(border=True):
+            st.subheader("最终分析结论")
+            st.write(result.final_answer)
+
+        if result.evidence_chain:
+            st.subheader("证据链")
+            st.dataframe(_trace_steps_view(result.evidence_chain["trace_steps"]), width="stretch")
+            st.info(f"差异发生点：{result.evidence_chain['breakpoint']}")
+
+        followup = st.text_input("追问", placeholder="例如：影响金额是多少？建议动作是什么？")
+        if followup:
+            st.write(answer_month_end_followup(followup, result))

@@ -47,7 +47,19 @@ python3.11 -m venv .venv
 3. 切换 `2025-06`、`2025-07`、`2025-08`，在“费用分摊准确性检查”查看比例、规则版本和分摊因子异常。
 4. 打开“异常清单”，选择需要穿透的异常编号。
 5. 进入“异常证据链”，查看差异定位结论、逐层证据和处理建议。
-6. 在“AI / mock 归因报告”中导出 Markdown 报告到 `data/output/`。
+6. 进入“Agent 工作台”，输入自然语言任务，查看分析计划、工具调用轨迹、观察结果和追问回答。
+7. 在“AI / mock 归因报告”中导出 Markdown 报告到 `data/output/`。
+
+## Agent 工作台
+
+`src/agent.py` 提供 deterministic mock Agent 层，不强制依赖外部 LLM。它会根据自然语言任务识别期间、异常编号和任务类型，真实调用现有函数：
+
+- `detect_reconciliation_exceptions`
+- `build_evidence_chain`
+- `generate_root_cause_report`
+- `export_root_cause_report`
+
+Streamlit 的“Agent 工作台”会展示用户任务、自动分析计划、工具调用轨迹、每一步观察结果、最终结论、证据链和追问回答。第一版支持经纪佣金收入差异、费用分摊异常和指定异常编号三类任务。
 
 ## 数据质量检查
 
