@@ -1,21 +1,33 @@
 # Securities Month-End Reconciliation Agent
 
-> 面向证券公司财务月结的智能差异归因 Agent，自动完成“佣金收入勾稽 -> 费用分摊校验 -> 异常分级 -> 证据链穿透 -> 根因报告”的排查链路。
+> 面向证券公司财务月结的智能差异归因 Agent，自动完成
+> “佣金收入勾稽 -> 费用分摊校验 -> 异常分级 -> 证据链穿透 -> 根因报告”
+> 的排查链路。
 
 ![Python](https://img.shields.io/badge/python-3.11%2B-blue)
-[![CI](https://github.com/emmadong521-beep/securities-month-end-recon-agent/actions/workflows/tests.yml/badge.svg)](https://github.com/emmadong521-beep/securities-month-end-recon-agent/actions/workflows/tests.yml)
+[![CI][ci-badge]][ci-workflow]
 ![Tests](https://img.shields.io/badge/tests-33%20passed-brightgreen)
 ![Data Quality](https://img.shields.io/badge/data%20quality-PASS-brightgreen)
 ![Streamlit](https://img.shields.io/badge/streamlit-demo%20ready-ff4b4b)
+
+[ci-badge]: https://github.com/emmadong521-beep/securities-month-end-recon-agent/actions/workflows/tests.yml/badge.svg
+[ci-workflow]: https://github.com/emmadong521-beep/securities-month-end-recon-agent/actions/workflows/tests.yml
 
 <!-- After deploying to Streamlit Community Cloud, replace the URL below. -->
 <!-- [![Open in Streamlit](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://your-app-name.streamlit.app) -->
 
 ## Demo
 
-Demo GIF placeholder: add `docs/assets/demo.gif` after recording a 30-60 second walkthrough.
+Demo GIF placeholder: add `docs/assets/demo.gif` after recording a 30-60 second
+walkthrough.
 
-Recommended screenshots are documented in [`docs/assets/README.md`](docs/assets/README.md): Agent workbench, evidence chain, severity and case matching, and validated data export.
+Recommended screenshots are documented in
+[`docs/assets/README.md`](docs/assets/README.md):
+
+- Agent workbench
+- Evidence chain
+- Severity and case matching
+- Validated data export
 
 ## Key Metrics
 
@@ -43,15 +55,26 @@ python -m src.project_metrics
 
 ## Quick Demo Path
 
-1. Start Streamlit and open “月结批次概览”; select `2025-03` to see month-end exception volume.
-2. Open “经纪佣金收入勾稽检查” to compare commission calculation, revenue subledger, and GL journal amounts in 万元.
-3. Switch to `2025-06`, `2025-07`, and `2025-08` to inspect cost allocation ratio, rule version, and missing driver issues.
+1. Start Streamlit and open “月结批次概览”; select `2025-03` to see month-end
+   exception volume.
+2. Open “经纪佣金收入勾稽检查” to compare commission calculation, revenue
+   subledger, and GL journal amounts in 万元.
+3. Switch to `2025-06`, `2025-07`, and `2025-08` to inspect cost allocation
+   ratio, rule version, and missing driver issues.
 4. Open “异常清单” and filter by severity.
-5. Open “异常证据链” to see the breakpoint, trace layers, root cause, and recommended action.
-6. Open “Agent 工作台”; enter a natural-language task and review the plan, tool calls, observations, final answer, and follow-up response.
-7. Open “可信数据导出” to generate validated revenue, allocated expense, and validation summary files.
+5. Open “异常证据链” to see the breakpoint, trace layers, root cause, and
+   recommended action.
+6. Open “Agent 工作台”; enter a natural-language task and review the plan,
+   tool calls, observations, final answer, and follow-up response.
+7. Open “可信数据导出” to generate validated revenue, allocated expense, and
+   validation summary files.
 
-Jump to: [Architecture](#architecture) | [Run Locally](#run-locally) | [Engineering Quality](#engineering-quality) | [Agent Workbench](#agent-workbench) | [Data Quality](#data-quality)
+Jump to:
+[Architecture](#architecture) |
+[Run Locally](#run-locally) |
+[Engineering Quality](#engineering-quality) |
+[Agent Workbench](#agent-workbench) |
+[Data Quality](#data-quality)
 
 ## Architecture
 
@@ -95,7 +118,10 @@ This PoC simulates two month-end close scenarios for a securities company:
 - Brokerage commission revenue reconciliation: `trade_flow -> commission_calc -> revenue_subledger -> gl_journal -> gl_balance`
 - Branch and business-line cost allocation validation: `expense_pool -> allocation_rule -> allocation_driver -> allocation_result`
 
-All detailed customer, trade, voucher, branch, cost pool, and allocation data is synthetic. Public audit-report figures are used only for aggregate-scale calibration. The project does not contain non-public information, customer privacy data, or commercial secrets, and it is not investment advice.
+All detailed customer, trade, voucher, branch, cost pool, and allocation data is
+synthetic. Public audit-report figures are used only for aggregate-scale
+calibration. The project does not contain non-public information, customer
+privacy data, or commercial secrets, and it is not investment advice.
 
 ## Run Locally
 
@@ -118,12 +144,14 @@ One-command local launch:
 
 CI workflow: [`.github/workflows/tests.yml`](.github/workflows/tests.yml)
 
-The GitHub Actions workflow runs on `push` and `pull_request` with Python 3.11 and `LLM_ENABLED=false`. It performs:
+The GitHub Actions workflow runs on `push` and `pull_request` with Python 3.11
+and `LLM_ENABLED=false`. It performs:
 
 - dependency installation with `pip install -e ".[dev]"`
 - synthetic data generation and DuckDB initialization
 - `python -m pytest -q`
-- `python -m pytest --cov=src --cov-report=term-missing --cov-report=xml --cov-report=html`
+- `python -m pytest --cov=src --cov-report=term-missing --cov-report=xml
+  --cov-report=html`
 - `python -m src.data_quality`
 - upload of `htmlcov` and `coverage.xml` as artifacts
 
@@ -145,7 +173,9 @@ Engineering docs:
 
 ## Agent Workbench
 
-`src/agent.py` supports deterministic mock mode and optional Volcengine Ark LLM enhancement. The Agent never delegates amount calculation or reconciliation logic to the model. It calls local tools and records each step:
+`src/agent.py` supports deterministic mock mode and optional Volcengine Ark LLM
+enhancement. The Agent never delegates amount calculation or reconciliation
+logic to the model. It calls local tools and records each step:
 
 - `detect_reconciliation_exceptions`
 - `grade_exception`
@@ -154,19 +184,26 @@ Engineering docs:
 - `generate_root_cause_report`
 - `export_root_cause_report`
 
-The Streamlit Agent workbench displays the user task, generated plan, tool-call trace, observations, severity, matched historical cases, final answer, and follow-up responses.
+The Streamlit Agent workbench displays the user task, generated plan, tool-call
+trace, observations, severity, matched historical cases, final answer, and
+follow-up responses.
 
 ## Exception Severity
 
-`src/severity.py` assigns `HIGH / MEDIUM / LOW` based on amount, affected layer, and exception type:
+`src/severity.py` assigns `HIGH / MEDIUM / LOW` based on amount, affected layer,
+and exception type:
 
-- `HIGH`: revenue recognition, GL posting, duplicate posting, or short posting issues that may affect financial statement amounts.
-- `MEDIUM`: allocation ratio, rule version, or driver issues that affect management accounting views.
+- `HIGH`: revenue recognition, GL posting, duplicate posting, or short posting
+  issues that may affect financial statement amounts.
+- `MEDIUM`: allocation ratio, rule version, or driver issues that affect
+  management accounting views.
 - `LOW`: small mapping or presentation-level issues.
 
 ## Historical Case Matching
 
-`src/case_matcher.py` matches exceptions to the `root_cause_case` table using deterministic scoring across scenario, exception type, suspected reason, and evidence-chain breakpoint.
+`src/case_matcher.py` matches exceptions to the `root_cause_case` table using
+deterministic scoring across scenario, exception type, suspected reason, and
+evidence-chain breakpoint.
 
 ## Validated Data Export
 
@@ -207,7 +244,9 @@ Notes:
 - `ARK_MODEL` should be replaced with the actual Model ID from the Volcengine Ark console.
 - Do not commit `.env`; it is ignored by `.gitignore`.
 - If the key or model is not configured, the app automatically uses Mock Agent mode.
-- LLM is used for task understanding and natural-language expression only. Reconciliation, evidence, severity, and amount calculations remain local code outputs.
+- LLM is used for task understanding and natural-language expression only.
+  Reconciliation, evidence, severity, and amount calculations remain local code
+  outputs.
 
 ## Data Quality
 
@@ -220,11 +259,28 @@ Outputs:
 - `data/output/data_quality_report.md`
 - `data/output/data_quality_report.json`
 
-The report covers row counts, primary-key uniqueness, foreign-key integrity, amount null checks, reconciliation checks, seeded demo exception detection, public aggregate calibration, and final `PASS / WARNING / FAIL` status.
+The report covers row counts, primary-key uniqueness, foreign-key integrity,
+amount null checks, reconciliation checks, seeded demo exception detection,
+public aggregate calibration, and final `PASS / WARNING / FAIL` status.
 
 ## Core Tables
 
-`chart_of_accounts`, `branch_master`, `biz_line_master`, `customer_master`, `trade_flow`, `commission_calc`, `revenue_subledger`, `gl_journal`, `gl_balance`, `expense_pool`, `allocation_rule`, `allocation_driver`, `allocation_result`, `interface_batch_log`, `reconciliation_exception`, `root_cause_case`
+- `chart_of_accounts`
+- `branch_master`
+- `biz_line_master`
+- `customer_master`
+- `trade_flow`
+- `commission_calc`
+- `revenue_subledger`
+- `gl_journal`
+- `gl_balance`
+- `expense_pool`
+- `allocation_rule`
+- `allocation_driver`
+- `allocation_result`
+- `interface_batch_log`
+- `reconciliation_exception`
+- `root_cause_case`
 
 ## Seeded Demo Scenarios
 

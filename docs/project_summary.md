@@ -2,13 +2,21 @@
 
 ## 业务价值
 
-本项目面向证券公司月结场景，模拟经纪佣金收入、收入子账、总账凭证和费用分摊之间的勾稽检查，帮助使用者快速定位未入账、少入账、重复凭证、科目映射错误和分摊异常。
+本项目面向证券公司月结场景，模拟经纪佣金收入、收入子账、总账凭证和
+费用分摊之间的勾稽检查，帮助使用者快速定位：
+
+- 未入账
+- 少入账
+- 重复凭证
+- 科目映射错误
+- 分摊异常
 
 ## 技术实现
 
 - 使用 Python、pandas 和 DuckDB 构建可重复运行的数据生成、入库和分析流程。
 - 使用规则引擎输出异常清单、根因说明和逐层证据链。
-- 新增 deterministic mock Agent 层，将自然语言任务解析为分析计划，并真实调用异常检测、证据链和归因报告工具。
+- 新增 deterministic mock Agent 层，将自然语言任务解析为分析计划。
+- Agent 会真实调用异常检测、证据链和归因报告工具。
 - 使用 Streamlit 和 Plotly 提供可交互的月结差异检查页面。
 
 ## Agent 层能力
@@ -16,9 +24,13 @@
 - 支持按期间分析经纪佣金收入最大差异。
 - 支持按期间分析费用分摊异常。
 - 支持按异常编号直接生成证据链和归因报告。
-- 展示用户任务、计划、工具调用轨迹、观察结果、最终结论、异常分级、历史案例匹配和追问回答。
-- 通过工具注册表组织 `detect_reconciliation_exceptions`、`grade_exception`、`build_evidence_chain`、`match_root_cause_cases` 和 `generate_root_cause_report`。
-- 支持将已校验收入和费用分摊数据导出为 `validated_actual_revenue.csv` 和 `validated_allocated_expense.csv`，供下游管理会计分析使用。
+- 展示用户任务、计划、工具调用轨迹、观察结果、最终结论、异常分级、
+  历史案例匹配和追问回答。
+- 通过工具注册表组织 `detect_reconciliation_exceptions`、`grade_exception`、
+  `build_evidence_chain`、`match_root_cause_cases` 和
+  `generate_root_cause_report`。
+- 支持将已校验收入和费用分摊数据导出为 `validated_actual_revenue.csv`
+  和 `validated_allocated_expense.csv`，供下游管理会计分析使用。
 - 预留 LLM API 扩展点，金额和证据仍由规则与查询结果提供。
 
 ## 后续扩展
