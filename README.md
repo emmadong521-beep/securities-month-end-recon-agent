@@ -21,6 +21,10 @@
 Demo GIF placeholder: add `docs/assets/demo.gif` after recording a 30-60 second
 walkthrough.
 
+Recording guide: [`docs/DEMO_RECORDING_GUIDE.md`](docs/DEMO_RECORDING_GUIDE.md)
+
+Deployment guide: [`docs/STREAMLIT_DEPLOYMENT.md`](docs/STREAMLIT_DEPLOYMENT.md)
+
 Recommended screenshots are documented in
 [`docs/assets/README.md`](docs/assets/README.md):
 
@@ -68,6 +72,15 @@ python -m src.project_metrics
    tool calls, observations, final answer, and follow-up response.
 7. Open “可信数据导出” to generate validated revenue, allocated expense, and
    validation summary files.
+
+## Project Documentation
+
+- [Design Decisions](docs/DESIGN_DECISIONS.md)
+- [Testing and Quality](docs/TESTING_AND_QUALITY.md)
+- [Capability Boundary](docs/CAPABILITY_BOUNDARY.md)
+- [Demo Recording Guide](docs/DEMO_RECORDING_GUIDE.md)
+- [Streamlit Deployment](docs/STREAMLIT_DEPLOYMENT.md)
+- [Changelog](CHANGELOG.md)
 
 Jump to:
 [Architecture](#architecture) |
