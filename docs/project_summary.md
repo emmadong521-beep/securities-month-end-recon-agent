@@ -16,7 +16,9 @@
 - 支持按期间分析经纪佣金收入最大差异。
 - 支持按期间分析费用分摊异常。
 - 支持按异常编号直接生成证据链和归因报告。
-- 展示用户任务、计划、工具调用轨迹、观察结果、最终结论和追问回答。
+- 展示用户任务、计划、工具调用轨迹、观察结果、最终结论、异常分级、历史案例匹配和追问回答。
+- 通过工具注册表组织 `detect_reconciliation_exceptions`、`grade_exception`、`build_evidence_chain`、`match_root_cause_cases` 和 `generate_root_cause_report`。
+- 支持将已校验收入和费用分摊数据导出为 `validated_actual_revenue.csv` 和 `validated_allocated_expense.csv`，供下游管理会计分析使用。
 - 预留 LLM API 扩展点，金额和证据仍由规则与查询结果提供。
 
 ## 后续扩展

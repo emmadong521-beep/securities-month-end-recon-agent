@@ -11,9 +11,12 @@ import pandas as pd
 import plotly.express as px
 
 from src.agent import answer_month_end_followup, run_month_end_agent
-from src.db import load_synthetic_data_to_duckdb
+from src.case_matcher import format_matched_cases_markdown, match_root_cause_cases
+from src.db import ensure_database_initialized, rebuild_database
 from src.evidence_chain import build_evidence_chain, format_evidence_chain_markdown
+from src.export_validated_data import export_all, export_validation_summary
 from src.llm_client import explain_llm_config_status, is_llm_available, load_llm_config
+from src.severity import grade_all_exceptions, grade_exception
 from src.validation import (
     detect_reconciliation_exceptions,
     explain_exception_mock,
@@ -27,11 +30,14 @@ from src.validation import (
 st.set_page_config(page_title="证券公司月结差异归因 Agent", layout="wide")
 st.title("证券公司月结差异归因 Agent")
 
-load_synthetic_data_to_duckdb()
+ensure_database_initialized(force_rebuild=False)
+if st.sidebar.button("重新生成数据"):
+    rebuild_database()
+    st.sidebar.success("数据和 DuckDB 已重新生成。")
 period = st.sidebar.selectbox("会计期间", [f"2025-{m:02d}" for m in range(1, 13)], index=2)
 page = st.sidebar.radio(
     "功能",
-    ["月结批次概览", "经纪佣金收入勾稽检查", "费用分摊准确性检查", "异常清单", "异常详情", "异常证据链", "AI / mock 归因报告", "Agent 工作台"],
+    ["月结批次概览", "经纪佣金收入勾稽检查", "费用分摊准确性检查", "异常清单", "异常详情", "异常证据链", "可信数据导出", "AI / mock 归因报告", "Agent 工作台"],
 )
 
 exceptions = detect_reconciliation_exceptions(period)
@@ -159,7 +165,14 @@ elif page == "费用分摊准确性检查":
     st.caption("费用池金额应被完整分摊；缺口通常来自比例不满、规则版本错误或分摊因子缺失。")
 
 elif page == "异常清单":
-    st.dataframe(_amount_view(exceptions), width="stretch")
+    grades = grade_all_exceptions(period)
+    view = exceptions.merge(grades, on=["exception_id", "period"], how="left", suffixes=("", "_graded"))
+    severity_options = ["ALL"] + sorted(view["severity_graded"].dropna().unique().tolist())
+    selected_severity = st.selectbox("严重等级", severity_options)
+    if selected_severity != "ALL":
+        view = view[view["severity_graded"] == selected_severity]
+    st.dataframe(_amount_view(view), width="stretch")
+    st.caption("严重等级按影响链路、差异金额和处理优先级生成，用于区分总账风险和管理会计口径风险。")
 
 elif page == "异常详情":
     if exceptions.empty:
@@ -167,6 +180,15 @@ elif page == "异常详情":
     else:
         exception_id = st.selectbox("异常编号", exceptions["exception_id"].tolist())
         st.dataframe(_amount_view(exceptions[exceptions["exception_id"] == exception_id]), width="stretch")
+        with st.container(border=True):
+            grade = grade_exception(exception_id)
+            st.subheader("异常分级")
+            c1, c2 = st.columns(2)
+            c1.metric("严重等级", grade["severity"])
+            c2.metric("处理优先级", grade["recommended_priority"])
+            st.write(grade["severity_reason"])
+        st.subheader("相似历史案例")
+        st.markdown(format_matched_cases_markdown(exception_id))
         st.write(explain_exception_mock(exception_id))
         question = st.text_input("追问")
         if question:
@@ -180,9 +202,11 @@ elif page == "异常证据链":
         chain = build_evidence_chain(exception_id)
         with st.container(border=True):
             st.subheader("差异定位结论")
+            grade = grade_exception(exception_id)
             c1, c2 = st.columns(2)
             c1.metric("差异金额", f"{chain['diff_amount'] / 10000:,.2f} 万元")
-            c2.metric("差异发生层级", chain["breakpoint"])
+            c2.metric("严重等级", grade["severity"])
+            st.markdown(f"**差异发生层级：** {chain['breakpoint']}")
             st.markdown(f"**根因：** {chain['root_cause']}")
             st.markdown(f"**建议动作：** {chain['recommended_action']}")
         st.subheader("异常基本信息")
@@ -204,6 +228,20 @@ elif page == "异常证据链":
         st.write(chain["recommended_action"])
         with st.expander("Markdown 证据链"):
             st.markdown(format_evidence_chain_markdown(exception_id))
+
+elif page == "可信数据导出":
+    st.subheader("可信数据导出")
+    st.caption("导出经过月结校验标记的收入、费用分摊和校验汇总数据，供管理会计分析使用。")
+    if st.button("生成导出文件"):
+        paths = export_all()
+        st.session_state["validated_export_paths"] = [str(path) for path in paths]
+    paths = st.session_state.get("validated_export_paths")
+    if paths:
+        for path in paths:
+            st.success(path)
+    summary_path = export_validation_summary(period)
+    if summary_path.exists():
+        st.dataframe(_amount_view(pd.read_csv(summary_path)), width="stretch")
 
 elif page == "AI / mock 归因报告":
     if exceptions.empty:
@@ -261,6 +299,13 @@ else:
 
         with st.container(border=True):
             st.subheader("最终分析结论")
+            if result.severity:
+                c1, c2 = st.columns(2)
+                c1.metric("严重等级", result.severity.get("severity", "UNKNOWN"))
+                c2.metric("处理优先级", result.severity.get("recommended_priority", "待评估"))
+            if result.matched_cases:
+                top_case = result.matched_cases[0]
+                st.caption(f"最高匹配历史案例：{top_case['case_id']}，匹配分数 {top_case['match_score']}。")
             st.write(result.final_answer)
 
         if result.evidence_chain:

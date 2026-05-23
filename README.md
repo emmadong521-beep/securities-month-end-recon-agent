@@ -52,14 +52,46 @@ python3.11 -m venv .venv
 
 ## Agent 工作台
 
-`src/agent.py` 提供 deterministic mock Agent 层，不强制依赖外部 LLM。它会根据自然语言任务识别期间、异常编号和任务类型，真实调用现有函数：
+`src/agent.py` 提供 deterministic mock Agent 层，并支持可选火山方舟 LLM 增强。它会根据自然语言任务识别期间、异常编号和任务类型，真实调用现有函数：
 
 - `detect_reconciliation_exceptions`
+- `grade_exception`
 - `build_evidence_chain`
+- `match_root_cause_cases`
 - `generate_root_cause_report`
 - `export_root_cause_report`
 
-Streamlit 的“Agent 工作台”会展示用户任务、自动分析计划、工具调用轨迹、每一步观察结果、最终结论、证据链和追问回答。第一版支持经纪佣金收入差异、费用分摊异常和指定异常编号三类任务。
+Streamlit 的“Agent 工作台”会展示用户任务、自动分析计划、工具调用轨迹、每一步观察结果、最终结论、证据链、严重等级、历史案例匹配和追问回答。支持经纪佣金收入差异、费用分摊异常和指定异常编号三类任务。
+
+## 异常分级
+
+`src/severity.py` 按差异金额、影响链路和异常类型生成 `HIGH / MEDIUM / LOW` 分级：
+
+- `HIGH`：收入确认、总账凭证、重复入账或漏入账等可能影响财务报表金额的异常。
+- `MEDIUM`：分摊比例、规则版本、分摊因子等影响管理会计口径的异常。
+- `LOW`：小额维度映射或展示口径问题。
+
+Streamlit 的“异常清单”支持按严重等级筛选，“异常证据链”和“Agent 工作台”会展示分级原因和处理优先级。
+
+## 历史案例匹配
+
+`src/case_matcher.py` 使用场景、异常类型、症状关键词和证据链断点进行 deterministic scoring，从 `root_cause_case` 表中匹配相似历史案例。匹配结果包含案例编号、分数、根因、证据模式、建议动作和匹配理由，并在异常详情页和 Agent 工作台展示。
+
+## 可信数据导出
+
+`src/export_validated_data.py` 可导出供管理会计分析使用的月结校验数据：
+
+```bash
+.venv/bin/python -m src.export_validated_data
+```
+
+输出文件：
+
+- `data/output/validated_actual_revenue.csv`
+- `data/output/validated_allocated_expense.csv`
+- `data/output/validation_summary.csv`
+
+导出数据会标记 `PASS / WARNING`，用于表达“经过月结校验的数据可供项目二管理会计分析使用”的链路关系。
 
 ## Volcengine Ark LLM Integration
 

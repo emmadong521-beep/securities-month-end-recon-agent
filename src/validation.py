@@ -64,7 +64,16 @@ def reconcile_allocation_result(period: str) -> pd.DataFrame:
     return out.sort_values("pool_id").reset_index(drop=True)
 
 
-def detect_reconciliation_exceptions(period: str) -> pd.DataFrame:
+def _write_exceptions_to_db(df: pd.DataFrame) -> None:
+    if Path(DB_PATH).exists():
+        con = duckdb.connect(str(DB_PATH))
+        try:
+            con.execute("CREATE OR REPLACE TABLE reconciliation_exception AS SELECT * FROM df")
+        finally:
+            con.close()
+
+
+def detect_reconciliation_exceptions(period: str, write_to_db: bool = False) -> pd.DataFrame:
     rows = []
     idx = 1
     rec = reconcile_commission_to_gl(period)
@@ -188,30 +197,22 @@ def detect_reconciliation_exceptions(period: str) -> pd.DataFrame:
         df = pd.DataFrame(columns=["exception_id", "period", "scenario", "exception_type", "severity", "source_table", "target_table", "source_amount", "target_amount", "diff_amount", "diff_rate", "suspected_reason", "status"])
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     df.to_csv(OUTPUT_DIR / f"reconciliation_exceptions_{period}.csv", index=False)
-    if Path(DB_PATH).exists():
-        con = duckdb.connect(str(DB_PATH))
-        try:
-            con.execute("CREATE OR REPLACE TABLE reconciliation_exception AS SELECT * FROM df")
-        finally:
-            con.close()
+    if write_to_db:
+        _write_exceptions_to_db(df)
     return df
 
 
 def _all_exceptions() -> pd.DataFrame:
-    return detect_all_reconciliation_exceptions()
+    return detect_all_reconciliation_exceptions(write_to_db=False)
 
 
-def detect_all_reconciliation_exceptions() -> pd.DataFrame:
-    frames = [detect_reconciliation_exceptions(f"2025-{m:02d}") for m in range(1, 13)]
+def detect_all_reconciliation_exceptions(write_to_db: bool = True) -> pd.DataFrame:
+    frames = [detect_reconciliation_exceptions(f"2025-{m:02d}", write_to_db=False) for m in range(1, 13)]
     df = pd.concat(frames, ignore_index=True)
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     df.to_csv(OUTPUT_DIR / "reconciliation_exceptions_all.csv", index=False)
-    if Path(DB_PATH).exists():
-        con = duckdb.connect(str(DB_PATH))
-        try:
-            con.execute("CREATE OR REPLACE TABLE reconciliation_exception AS SELECT * FROM df")
-        finally:
-            con.close()
+    if write_to_db:
+        _write_exceptions_to_db(df)
     return df
 
 

@@ -7,8 +7,10 @@ from pathlib import Path
 
 import pandas as pd
 
+from .case_matcher import match_root_cause_cases
 from .evidence_chain import build_evidence_chain
 from .llm_client import call_llm, is_llm_available
+from .severity import grade_exception
 from .validation import (
     detect_reconciliation_exceptions,
     export_root_cause_report,
@@ -23,6 +25,8 @@ class AgentStep:
     tool_name: str
     tool_input: dict
     observation: str
+    reason_for_tool: str = ""
+    confidence: float | None = None
 
 
 @dataclass
@@ -35,6 +39,22 @@ class AgentResult:
     report_path: str | None
     llm_mode: str = "Mock Agent"
     llm_error: str | None = None
+    severity: dict | None = None
+    matched_cases: list[dict] | None = None
+
+
+TOOL_REGISTRY = {
+    "detect_reconciliation_exceptions": {"description": "查询指定期间月结异常清单", "scenario": "ALL"},
+    "grade_exception": {"description": "按金额、链路和影响面评定异常严重等级", "scenario": "ALL"},
+    "build_evidence_chain": {"description": "构建收入链路或费用分摊链路证据链", "scenario": "ALL"},
+    "match_root_cause_cases": {"description": "匹配相似历史根因案例", "scenario": "ALL"},
+    "generate_root_cause_report": {"description": "生成可复核的异常归因报告", "scenario": "ALL"},
+    "export_root_cause_report": {"description": "导出 Markdown 归因报告", "scenario": "ALL"},
+    "query_interface_batch_log": {"description": "接口批次日志查询扩展点", "scenario": "COMMISSION_TO_GL"},
+    "query_allocation_rule": {"description": "分摊规则查询扩展点", "scenario": "ALLOCATION"},
+    "query_allocation_driver": {"description": "分摊因子查询扩展点", "scenario": "ALLOCATION"},
+    "query_gl_journal_summary": {"description": "总账凭证汇总查询扩展点", "scenario": "COMMISSION_TO_GL"},
+}
 
 
 def _extract_period(user_task: str, period: str | None) -> str:
@@ -170,10 +190,10 @@ def parse_month_end_task_with_llm(
 
 def _fallback_plan(task_context: dict) -> list[str]:
     if task_context.get("exception_id"):
-        return ["解析异常编号", "构建证据链", "生成归因报告", "输出结论和建议动作"]
+        return ["解析异常编号和场景", "构建证据链定位差异层级", "评定异常严重等级", "匹配历史根因案例", "生成归因报告和处理建议"]
     if task_context.get("intent") == "allocation_reconciliation":
-        return ["查询期间异常清单", "筛选费用分摊异常", "构建分摊证据链", "生成根因结论和建议动作"]
-    return ["查询期间异常清单", "筛选经纪佣金收入异常", "构建收入链路证据链", "生成根因结论和建议动作"]
+        return ["查询期间异常清单", "筛选费用分摊异常", "构建分摊证据链", "评定管理会计影响等级", "匹配历史案例并生成建议动作"]
+    return ["查询期间异常清单", "筛选经纪佣金收入异常", "构建收入链路证据链", "评定总账和报表影响等级", "匹配历史案例并生成建议动作"]
 
 
 def generate_month_end_plan_with_llm(task_context: dict) -> list[str]:
@@ -204,12 +224,42 @@ def _final_answer(exception_id: str, chain: dict, report_path: str | None) -> st
     )
 
 
+def _enhanced_final_answer(
+    exception_id: str,
+    chain: dict,
+    severity: dict | None,
+    matched_cases: list[dict] | None,
+    report_path: str | None,
+) -> str:
+    severity = severity or {}
+    matched_cases = matched_cases or []
+    top_case = matched_cases[0] if matched_cases else {}
+    severity_text = str(severity.get("severity", "UNKNOWN"))
+    manual = "需要人工复核" if severity.get("requires_manual_review") else "可按自动校验结果跟踪"
+    case_text = (
+        f"最相似历史案例为 {top_case.get('case_id')}，根因模式为：{top_case.get('root_cause')}，"
+        f"建议动作：{top_case.get('recommended_action')}。"
+        if top_case
+        else "未匹配到相似历史案例。"
+    )
+    report_note = f"报告已保存至 `{report_path}`。" if report_path else "报告未生成。"
+    return (
+        f"异常 ID：{exception_id}；会计期间：{chain['period']}；异常类型：{chain['exception_type']}。"
+        f"差异金额 {_format_amount(float(chain['diff_amount']))}，差异发生层级为 {chain['breakpoint']}。"
+        f"严重等级：{severity_text}，原因：{severity.get('severity_reason', '未生成分级说明')}，"
+        f"处理优先级：{severity.get('recommended_priority', '待评估')}，{manual}。"
+        f"{case_text} 根因结论：{chain['root_cause']}。建议动作：{chain['recommended_action']}。{report_note}"
+    )
+
+
 def generate_month_end_final_answer_with_llm(
     user_task: str,
     plan: list[str],
     steps: list[AgentStep],
     evidence_chain: dict | None,
     mock_answer: str,
+    severity: dict | None = None,
+    matched_cases: list[dict] | None = None,
 ) -> str:
     if not is_llm_available():
         return mock_answer
@@ -218,6 +268,8 @@ def generate_month_end_final_answer_with_llm(
         "plan": plan,
         "steps": [step.__dict__ for step in steps],
         "evidence_chain": evidence_chain,
+        "severity": severity,
+        "matched_cases": matched_cases,
         "mock_answer": mock_answer,
     }
     content = call_llm(
@@ -285,6 +337,8 @@ def run_month_end_agent(
                 tool_name="detect_reconciliation_exceptions",
                 tool_input={"period": selected_period},
                 observation=f"检测到 {len(exceptions)} 条异常。",
+                reason_for_tool="先获取候选异常，确定本次排查对象。",
+                confidence=0.95,
             )
         )
         selected = _select_exception(exceptions, scenario)
@@ -302,6 +356,8 @@ def run_month_end_agent(
                     f"选中 {selected_exception_id}，类型 {selected['exception_type']}，"
                     f"差异金额 {_format_amount(float(selected['diff_amount']))}。"
                 ),
+                reason_for_tool="按任务场景和差异绝对值选择最高优先级异常。",
+                confidence=0.9,
             )
         )
 
@@ -316,6 +372,45 @@ def run_month_end_agent(
                 f"证据链包含 {len(evidence_chain['trace_steps'])} 个层级，"
                 f"差异发生点为 {evidence_chain['breakpoint']}。"
             ),
+            reason_for_tool="逐层穿透源系统、子账、总账或分摊链路，确认断点。",
+            confidence=0.92,
+        )
+    )
+
+    severity = grade_exception(selected_exception_id)
+    steps.append(
+        AgentStep(
+            step_no=len(steps) + 1,
+            thought="结合差异金额、影响链路和异常类型评估处理优先级。",
+            tool_name="grade_exception",
+            tool_input={"exception_id": selected_exception_id},
+            observation=(
+                f"严重等级 {severity['severity']}；影响层级 {severity['affected_layer']}；"
+                f"优先级 {severity['recommended_priority']}。"
+            ),
+            reason_for_tool="月结排查需要区分总账/报表风险和管理会计口径风险。",
+            confidence=0.88,
+        )
+    )
+
+    matched_cases = match_root_cause_cases(selected_exception_id, top_k=3)
+    top_case = matched_cases[0] if matched_cases else None
+    steps.append(
+        AgentStep(
+            step_no=len(steps) + 1,
+            thought="用当前异常症状、断点和异常类型匹配历史根因模式。",
+            tool_name="match_root_cause_cases",
+            tool_input={"exception_id": selected_exception_id, "top_k": 3},
+            observation=(
+                f"匹配到 {len(matched_cases)} 条相似案例。"
+                + (
+                    f"最高匹配案例 {top_case['case_id']}，分数 {top_case['match_score']}，根因 {top_case['root_cause']}。"
+                    if top_case
+                    else ""
+                )
+            ),
+            reason_for_tool="历史案例用于校验根因判断并给出可执行处理动作。",
+            confidence=0.86,
         )
     )
 
@@ -327,6 +422,8 @@ def run_month_end_agent(
             tool_name="generate_root_cause_report",
             tool_input={"exception_id": selected_exception_id},
             observation=f"已生成归因报告正文，共 {len(report)} 个字符。",
+            reason_for_tool="将证据链、分级和建议动作整理成可留痕报告。",
+            confidence=0.9,
         )
     )
 
@@ -339,19 +436,21 @@ def run_month_end_agent(
             tool_name="export_root_cause_report",
             tool_input={"exception_id": selected_exception_id},
             observation=f"报告路径：{report_path}",
+            reason_for_tool="导出 Markdown 文件，便于月结复核和跨团队流转。",
+            confidence=0.95,
         )
     )
 
-    mock_final = _final_answer(selected_exception_id, evidence_chain, report_path)
+    mock_final = _enhanced_final_answer(selected_exception_id, evidence_chain, severity, matched_cases, report_path)
     final = mock_final
     if requested_llm and is_llm_available():
         try:
-            final = generate_month_end_final_answer_with_llm(user_task, plan, steps, evidence_chain, mock_final)
+            final = generate_month_end_final_answer_with_llm(user_task, plan, steps, evidence_chain, mock_final, severity, matched_cases)
         except Exception as exc:
             llm_error = f"LLM 结论生成失败，已展示 Mock 结果：{exc}"
             llm_mode = "Mock Agent"
             final = mock_final
-    return AgentResult(user_task, plan, steps, final, evidence_chain, report_path, llm_mode, llm_error)
+    return AgentResult(user_task, plan, steps, final, evidence_chain, report_path, llm_mode, llm_error, severity, matched_cases)
 
 
 def answer_month_end_followup(question: str, context: AgentResult, use_llm: bool | None = None) -> str:
@@ -359,6 +458,8 @@ def answer_month_end_followup(question: str, context: AgentResult, use_llm: bool
     chain = context.evidence_chain or {}
     if not chain:
         return "当前上下文没有可用证据链，请先运行一次 Agent 分析。"
+    severity = context.severity or {}
+    matched_cases = context.matched_cases or []
     requested_llm = is_llm_available() if use_llm is None else bool(use_llm)
     if requested_llm and is_llm_available():
         try:
@@ -372,6 +473,8 @@ def answer_month_end_followup(question: str, context: AgentResult, use_llm: bool
                                 "final_answer": context.final_answer,
                                 "steps": [step.__dict__ for step in context.steps],
                                 "evidence_chain": context.evidence_chain,
+                                "severity": context.severity,
+                                "matched_cases": context.matched_cases,
                             },
                             ensure_ascii=False,
                             default=str,
@@ -388,6 +491,21 @@ def answer_month_end_followup(question: str, context: AgentResult, use_llm: bool
         except Exception:
             pass
 
+    if "高风险" in question or "高等级" in question or "为什么判断" in question:
+        return (
+            f"当前严重等级为 {severity.get('severity', 'UNKNOWN')}。"
+            f"判断依据：{severity.get('severity_reason', '未生成分级说明')}；"
+            f"影响层级：{severity.get('affected_layer', chain.get('breakpoint', '未知'))}；"
+            f"处理优先级：{severity.get('recommended_priority', '待评估')}。"
+        )
+    if "历史案例" in question or "相似" in question:
+        if not matched_cases:
+            return "当前上下文未匹配到相似历史案例。"
+        case_text = "；".join(
+            f"{case['case_id']}（分数 {case['match_score']}，根因：{case['root_cause']}）"
+            for case in matched_cases[:3]
+        )
+        return f"相似历史案例：{case_text}。"
     if "哪一层" in question or "哪个环节" in question or "发生在哪" in question:
         return f"差异发生层级为 {chain['breakpoint']}。"
     if "金额" in question or "影响" in question:
@@ -406,4 +524,15 @@ def answer_month_end_followup(question: str, context: AgentResult, use_llm: bool
         if str(chain.get("scenario")) == "ALLOCATION":
             return "会影响管理会计分析，因为费用分摊金额、规则或因子异常会改变营业部和业务线利润。"
         return "会影响管理会计分析，因为收入确认差异会传导到实际收入、利润贡献和经营分析口径。"
-    return "可以继续围绕差异层级、影响金额、总账影响、管理会计影响或建议动作追问。"
+    if "谁处理" in question or "责任" in question or "下一步" in question:
+        if str(chain.get("scenario")) == "ALLOCATION":
+            return "建议由财务管理会计或费用分摊规则负责人牵头，系统数据团队补充规则版本、分摊因子和批次重跑证据。"
+        return "建议由财务核算人员牵头，收入子账或总账接口负责人配合核对批次日志、凭证生成和幂等控制。"
+    if "财务经理" in question or "经理" in question or "说明" in question:
+        return (
+            f"给财务经理的说明：{chain['period']} 发现 {chain['exception_type']} 异常，"
+            f"差异金额 {_format_amount(float(chain['diff_amount']))}，断点位于 {chain['breakpoint']}。"
+            f"当前评级为 {severity.get('severity', 'UNKNOWN')}，建议按 {severity.get('recommended_priority', '既定优先级')} 处理，"
+            f"核心动作是：{chain['recommended_action']}"
+        )
+    return "可以继续围绕严重等级、历史案例、差异层级、影响金额、总账影响、管理会计影响或建议动作追问。"
