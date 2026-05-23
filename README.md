@@ -168,8 +168,8 @@ Current local coverage summary: [`data/output/coverage_summary.md`](data/output/
 
 Engineering docs:
 
-- [`docs/design_decisions.md`](docs/design_decisions.md)
-- [`docs/testing_and_quality.md`](docs/testing_and_quality.md)
+- [`docs/DESIGN_DECISIONS.md`](docs/DESIGN_DECISIONS.md)
+- [`docs/TESTING_AND_QUALITY.md`](docs/TESTING_AND_QUALITY.md)
 
 ## Agent Workbench
 
