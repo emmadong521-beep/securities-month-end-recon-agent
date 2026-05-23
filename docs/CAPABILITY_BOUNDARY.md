@@ -22,3 +22,10 @@ This project focuses on securities month-end reconciliation, evidence-chain trac
 - No production finance-system integration.
 - Case matching is deterministic scoring, not a full vector RAG system.
 - LLM enhances task understanding and explanation only.
+
+## Rendering Notes
+
+- The capability comparison is intentionally maintained as a standard Markdown
+  table.
+- The header, separator, and each comparison row are stored on independent
+  lines for reliable GitHub rendering.

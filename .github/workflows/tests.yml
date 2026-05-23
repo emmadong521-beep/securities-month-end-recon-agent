@@ -32,6 +32,9 @@ jobs:
           python -m src.seed_data
           python -m src.db
 
+      - name: Check Markdown and workflow formatting
+        run: python scripts/check_markdown_format.py
+
       - name: Run tests
         run: python -m pytest -q
 

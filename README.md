@@ -66,6 +66,16 @@ After deployment, replace the placeholder Streamlit badge with the deployed app 
 - [Streamlit Deployment](docs/STREAMLIT_DEPLOYMENT.md)
 - [Changelog](CHANGELOG.md)
 
+## Rendering Checks
+
+This README intentionally keeps GitHub-rendered sections as plain multi-line
+Markdown:
+
+- Key Metrics is a normal Markdown table with one metric per row.
+- Architecture diagrams use fenced `mermaid` blocks with `flowchart` on the
+  next line.
+- No generated diagram or table content is stored as a compressed single line.
+
 ## Architecture
 
 ### Data Flow
