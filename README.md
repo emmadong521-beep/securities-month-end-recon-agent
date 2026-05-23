@@ -73,6 +73,18 @@ python -m src.project_metrics
 7. Open “可信数据导出” to generate validated revenue, allocated expense, and
    validation summary files.
 
+## Online Demo
+
+The project can be deployed to Streamlit Community Cloud in deterministic mode
+without API keys.
+
+Deployment guide:
+
+- [Streamlit Deployment](docs/STREAMLIT_DEPLOYMENT.md)
+
+After deployment, replace the placeholder Streamlit badge with the deployed app
+URL.
+
 ## Project Documentation
 
 - [Design Decisions](docs/DESIGN_DECISIONS.md)
