@@ -29,3 +29,15 @@ def test_agent_followup_answers_amount_and_action():
     action_answer = answer_month_end_followup("建议动作是什么？", result)
     assert "万元" in amount_answer
     assert "建议动作" in action_answer
+
+
+def test_agent_falls_back_when_llm_unavailable(monkeypatch):
+    monkeypatch.setenv("LLM_ENABLED", "true")
+    monkeypatch.setenv("LLM_PROVIDER", "volcengine")
+    monkeypatch.setenv("ARK_API_KEY", "your_ark_api_key_here")
+    result = run_month_end_agent("请分析 2025-03 经纪佣金收入差异最大的异常，并定位根因。", use_llm=True)
+    tool_names = {step.tool_name for step in result.steps}
+    assert result.final_answer
+    assert result.llm_mode == "Mock Agent"
+    assert result.llm_error
+    assert "build_evidence_chain" in tool_names

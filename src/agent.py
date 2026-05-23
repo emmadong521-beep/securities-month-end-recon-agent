@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import re
+import json
 from dataclasses import dataclass
 from pathlib import Path
 
 import pandas as pd
 
 from .evidence_chain import build_evidence_chain
+from .llm_client import call_llm, is_llm_available
 from .validation import (
     detect_reconciliation_exceptions,
     export_root_cause_report,
@@ -31,6 +33,8 @@ class AgentResult:
     final_answer: str
     evidence_chain: dict | None
     report_path: str | None
+    llm_mode: str = "Mock Agent"
+    llm_error: str | None = None
 
 
 def _extract_period(user_task: str, period: str | None) -> str:
@@ -76,6 +80,121 @@ def _scenario_from_task(user_task: str) -> str:
     return "COMMISSION_TO_GL"
 
 
+def _intent_from_scenario(scenario: str, exception_id: str | None = None) -> str:
+    if exception_id:
+        return "exception_root_cause"
+    if scenario == "ALLOCATION":
+        return "allocation_reconciliation"
+    return "commission_reconciliation"
+
+
+def _scenario_from_intent(intent: str) -> str:
+    if intent == "allocation_reconciliation":
+        return "ALLOCATION"
+    return "COMMISSION_TO_GL"
+
+
+def _fallback_task_context(
+    user_task: str,
+    available_periods: list[str],
+    available_exceptions: list[str],
+    period: str | None = None,
+    exception_id: str | None = None,
+) -> dict:
+    selected_exception_id = _extract_exception_id(user_task, exception_id)
+    selected_period = _extract_period(user_task, period)
+    if selected_period not in available_periods:
+        selected_period = available_periods[0] if available_periods else "2025-03"
+    if selected_exception_id and available_exceptions and selected_exception_id not in available_exceptions:
+        selected_exception_id = None
+    scenario = _scenario_from_task(user_task)
+    return {
+        "intent": _intent_from_scenario(scenario, selected_exception_id),
+        "period": selected_period,
+        "exception_id": selected_exception_id,
+        "focus": "基于月结异常、证据链和归因报告定位根因",
+    }
+
+
+def parse_month_end_task_with_llm(
+    user_task: str,
+    available_periods: list[str],
+    available_exceptions: list[str],
+) -> dict:
+    fallback = _fallback_task_context(user_task, available_periods, available_exceptions)
+    if not is_llm_available():
+        return fallback
+    try:
+        content = call_llm(
+            [
+                {
+                    "role": "user",
+                    "content": json.dumps(
+                        {
+                            "user_task": user_task,
+                            "available_periods": available_periods,
+                            "available_exceptions": available_exceptions[:50],
+                            "allowed_intents": [
+                                "commission_reconciliation",
+                                "allocation_reconciliation",
+                                "exception_root_cause",
+                                "unknown",
+                            ],
+                        },
+                        ensure_ascii=False,
+                    ),
+                }
+            ],
+            system_prompt=(
+                "你只负责解析证券公司月结 Agent 任务意图，不做金额计算。"
+                "必须只返回 JSON，对象字段为 intent, period, exception_id, focus。"
+            ),
+        )
+        parsed = json.loads(content)
+        intent = str(parsed.get("intent") or fallback["intent"])
+        if intent not in {"commission_reconciliation", "allocation_reconciliation", "exception_root_cause", "unknown"}:
+            intent = fallback["intent"]
+        parsed_period = parsed.get("period") if parsed.get("period") in available_periods else fallback["period"]
+        parsed_exception = parsed.get("exception_id")
+        if available_exceptions and parsed_exception not in available_exceptions:
+            parsed_exception = fallback["exception_id"]
+        return {
+            "intent": intent,
+            "period": parsed_period,
+            "exception_id": parsed_exception,
+            "focus": str(parsed.get("focus") or fallback["focus"])[:120],
+        }
+    except Exception:
+        return fallback
+
+
+def _fallback_plan(task_context: dict) -> list[str]:
+    if task_context.get("exception_id"):
+        return ["解析异常编号", "构建证据链", "生成归因报告", "输出结论和建议动作"]
+    if task_context.get("intent") == "allocation_reconciliation":
+        return ["查询期间异常清单", "筛选费用分摊异常", "构建分摊证据链", "生成根因结论和建议动作"]
+    return ["查询期间异常清单", "筛选经纪佣金收入异常", "构建收入链路证据链", "生成根因结论和建议动作"]
+
+
+def generate_month_end_plan_with_llm(task_context: dict) -> list[str]:
+    fallback = _fallback_plan(task_context)
+    if not is_llm_available():
+        return fallback
+    try:
+        content = call_llm(
+            [{"role": "user", "content": json.dumps(task_context, ensure_ascii=False)}],
+            system_prompt=(
+                "你为证券公司月结差异归因 Agent 生成 4-6 步分析计划。"
+                "计划只能围绕查询异常清单、筛选异常、构建证据链、查看接口日志或规则配置、生成结论。"
+                "不要编造金额。每行输出一步计划，不要输出编号。"
+            ),
+        )
+        plan = [line.strip("- 1234567890.、") for line in content.splitlines() if line.strip()]
+        return plan[:6] or fallback
+    except Exception:
+        return fallback
+
+
 def _final_answer(exception_id: str, chain: dict, report_path: str | None) -> str:
     report_note = f"报告已保存至 `{report_path}`。" if report_path else "报告未生成。"
     return (
@@ -85,34 +204,73 @@ def _final_answer(exception_id: str, chain: dict, report_path: str | None) -> st
     )
 
 
+def generate_month_end_final_answer_with_llm(
+    user_task: str,
+    plan: list[str],
+    steps: list[AgentStep],
+    evidence_chain: dict | None,
+    mock_answer: str,
+) -> str:
+    if not is_llm_available():
+        return mock_answer
+    facts = {
+        "user_task": user_task,
+        "plan": plan,
+        "steps": [step.__dict__ for step in steps],
+        "evidence_chain": evidence_chain,
+        "mock_answer": mock_answer,
+    }
+    content = call_llm(
+        [{"role": "user", "content": json.dumps(facts, ensure_ascii=False, default=str)}],
+        system_prompt=(
+            "你是证券公司月结差异归因 Agent 的表达层。只能基于输入事实生成中文结论，"
+            "不得编造金额、异常编号、期间、营业部、批次号或根因。"
+            "如证据不足，必须说明当前数据不足以判断。金额单位保持万元。"
+        ),
+    )
+    return content.strip() or mock_answer
+
+
 def run_month_end_agent(
     user_task: str,
     period: str | None = None,
     exception_id: str | None = None,
+    use_llm: bool | None = None,
 ) -> AgentResult:
-    selected_period = _extract_period(user_task, period)
-    selected_exception_id = _extract_exception_id(user_task, exception_id)
-    scenario = _scenario_from_task(user_task)
-    if selected_exception_id:
-        plan = [
-            "解析自然语言任务中的异常编号",
-            "按异常编号构建证据链",
-            "生成归因报告并输出结论",
-        ]
-    elif scenario == "ALLOCATION":
-        plan = [
-            "查询当前期间异常清单",
-            "筛选费用分摊相关异常并定位最大差异",
-            "构建费用池、规则、因子和分摊结果证据链",
-            "生成归因报告并输出建议动作",
-        ]
-    else:
-        plan = [
-            "查询当前期间异常清单",
-            "筛选经纪佣金收入相关异常并定位最大差异",
-            "构建交易、佣金、子账和总账证据链",
-            "生成归因报告并输出建议动作",
-        ]
+    available_periods = [f"2025-{m:02d}" for m in range(1, 13)]
+    available_exceptions: list[str] = []
+    if period:
+        available_exceptions = detect_reconciliation_exceptions(period)["exception_id"].astype(str).tolist()
+    requested_llm = is_llm_available() if use_llm is None else bool(use_llm)
+    llm_error = None
+    llm_mode = "Mock Agent"
+    if requested_llm and is_llm_available():
+        llm_mode = "Volcengine Ark LLM Agent"
+    elif requested_llm:
+        llm_error = "LLM 配置不完整，已回退 Mock Agent。"
+
+    task_context = _fallback_task_context(user_task, available_periods, available_exceptions, period, exception_id)
+    if requested_llm and is_llm_available():
+        try:
+            task_context = parse_month_end_task_with_llm(user_task, available_periods, available_exceptions)
+            if period:
+                task_context["period"] = period
+            if exception_id:
+                task_context["exception_id"] = exception_id
+                task_context["intent"] = "exception_root_cause"
+        except Exception as exc:
+            llm_error = f"LLM 任务解析失败，已回退 Mock Agent：{type(exc).__name__}"
+            llm_mode = "Mock Agent"
+
+    selected_period = str(task_context.get("period") or _extract_period(user_task, period))
+    selected_exception_id = task_context.get("exception_id") or _extract_exception_id(user_task, exception_id)
+    scenario = _scenario_from_intent(str(task_context.get("intent") or "commission_reconciliation"))
+    plan = _fallback_plan(task_context)
+    if requested_llm and is_llm_available():
+        try:
+            plan = generate_month_end_plan_with_llm(task_context)
+        except Exception as exc:
+            llm_error = f"LLM 计划生成失败，已使用 Mock 计划：{type(exc).__name__}"
 
     steps: list[AgentStep] = []
     evidence_chain: dict | None = None
@@ -132,7 +290,7 @@ def run_month_end_agent(
         selected = _select_exception(exceptions, scenario)
         if selected is None:
             final = f"{selected_period} 未检测到符合任务类型的异常。"
-            return AgentResult(user_task, plan, steps, final, None, None)
+            return AgentResult(user_task, plan, steps, final, None, None, llm_mode, llm_error)
         selected_exception_id = str(selected["exception_id"])
         steps.append(
             AgentStep(
@@ -184,15 +342,51 @@ def run_month_end_agent(
         )
     )
 
-    final = _final_answer(selected_exception_id, evidence_chain, report_path)
-    return AgentResult(user_task, plan, steps, final, evidence_chain, report_path)
+    mock_final = _final_answer(selected_exception_id, evidence_chain, report_path)
+    final = mock_final
+    if requested_llm and is_llm_available():
+        try:
+            final = generate_month_end_final_answer_with_llm(user_task, plan, steps, evidence_chain, mock_final)
+        except Exception as exc:
+            llm_error = f"LLM 结论生成失败，已展示 Mock 结果：{type(exc).__name__}"
+            llm_mode = "Mock Agent"
+            final = mock_final
+    return AgentResult(user_task, plan, steps, final, evidence_chain, report_path, llm_mode, llm_error)
 
 
-def answer_month_end_followup(question: str, context: AgentResult) -> str:
+def answer_month_end_followup(question: str, context: AgentResult, use_llm: bool | None = None) -> str:
     question_norm = question.strip().lower()
     chain = context.evidence_chain or {}
     if not chain:
         return "当前上下文没有可用证据链，请先运行一次 Agent 分析。"
+    requested_llm = is_llm_available() if use_llm is None else bool(use_llm)
+    if requested_llm and is_llm_available():
+        try:
+            content = call_llm(
+                [
+                    {
+                        "role": "user",
+                        "content": json.dumps(
+                            {
+                                "question": question,
+                                "final_answer": context.final_answer,
+                                "steps": [step.__dict__ for step in context.steps],
+                                "evidence_chain": context.evidence_chain,
+                            },
+                            ensure_ascii=False,
+                            default=str,
+                        ),
+                    }
+                ],
+                system_prompt=(
+                    "你回答证券公司月结 Agent 的追问。只能引用上下文已有事实，"
+                    "不得新增金额、异常编号、期间、批次或根因。金额单位保持万元。"
+                ),
+            )
+            if content.strip():
+                return content.strip()
+        except Exception:
+            pass
 
     if "哪一层" in question or "哪个环节" in question or "发生在哪" in question:
         return f"差异发生层级为 {chain['breakpoint']}。"
