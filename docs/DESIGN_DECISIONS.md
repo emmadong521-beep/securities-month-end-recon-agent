@@ -30,8 +30,8 @@ reproducible and testable.
 ### Make LLM optional
 
 The Volcengine Ark integration enhances language understanding and expression
-only. If configuration is missing or API calls fail, the app falls back to Mock
-Agent mode.
+only. If configuration is missing or API calls fail, the app uses the
+deterministic fallback mode.
 
 ### Preserve tool-call trace
 

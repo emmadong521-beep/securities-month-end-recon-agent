@@ -15,7 +15,7 @@
 
 - 使用 Python、pandas 和 DuckDB 构建可重复运行的数据生成、入库和分析流程。
 - 使用规则引擎输出异常清单、根因说明和逐层证据链。
-- 新增 deterministic mock Agent 层，将自然语言任务解析为分析计划。
+- 新增 Deterministic Agent Mode，将自然语言任务解析为分析计划。
 - Agent 会真实调用异常检测、证据链和归因报告工具。
 - 使用 Streamlit 和 Plotly 提供可交互的月结差异检查页面。
 

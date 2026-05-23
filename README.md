@@ -173,9 +173,9 @@ Engineering docs:
 
 ## Agent Workbench
 
-`src/agent.py` supports deterministic mock mode and optional Volcengine Ark LLM
-enhancement. The Agent never delegates amount calculation or reconciliation
-logic to the model. It calls local tools and records each step:
+`src/agent.py` supports Deterministic Agent Mode + Optional LLM Enhancement.
+The Agent never delegates amount calculation or reconciliation logic to the
+model. It calls local tools and records each step:
 
 - `detect_reconciliation_exceptions`
 - `grade_exception`
@@ -243,7 +243,8 @@ Notes:
 
 - `ARK_MODEL` should be replaced with the actual Model ID from the Volcengine Ark console.
 - Do not commit `.env`; it is ignored by `.gitignore`.
-- If the key or model is not configured, the app automatically uses Mock Agent mode.
+- If the key or model is not configured, the app automatically uses the
+  deterministic fallback mode.
 - LLM is used for task understanding and natural-language expression only.
   Reconciliation, evidence, severity, and amount calculations remain local code
   outputs.
