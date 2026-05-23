@@ -3,6 +3,7 @@
 ## Local Commands
 
 ```bash
+python3 scripts/check_markdown_format.py
 python -m pytest -q
 python -m pytest --cov=src --cov-report=term-missing --cov-report=html --cov-report=xml
 python -m src.data_quality
@@ -10,6 +11,13 @@ python -m src.project_metrics
 ```
 
 The same checks are wired into `.github/workflows/tests.yml`.
+
+## Format Checks
+
+`python3 scripts/check_markdown_format.py` verifies that README, engineering
+docs, and workflow files are real multi-line Markdown or YAML files. It checks
+line counts, long lines, required README sections, fenced code-block balance,
+Mermaid fences, and GitHub Actions YAML structure.
 
 ## Test Coverage Areas
 

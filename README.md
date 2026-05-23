@@ -158,6 +158,7 @@ and `LLM_ENABLED=false`. It performs:
 Local commands:
 
 ```bash
+python3 scripts/check_markdown_format.py
 python -m pytest -q
 python -m pytest --cov=src --cov-report=term-missing --cov-report=html
 python -m src.data_quality
