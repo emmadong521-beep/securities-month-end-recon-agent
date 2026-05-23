@@ -3,12 +3,16 @@ __pycache__/
 .pytest_cache/
 .streamlit/
 .env
+.coverage
+coverage.xml
+htmlcov/
 *.pyc
 *.egg-info/
 *.duckdb
 *.duckdb.wal
 data/output/*
 !data/output/.gitkeep
+!data/output/coverage_summary.md
 **/*.pdf
 **/*.PDF
 .DS_Store

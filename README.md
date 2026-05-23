@@ -3,6 +3,7 @@
 > 面向证券公司财务月结的智能差异归因 Agent，自动完成“佣金收入勾稽 -> 费用分摊校验 -> 异常分级 -> 证据链穿透 -> 根因报告”的排查链路。
 
 ![Python](https://img.shields.io/badge/python-3.11%2B-blue)
+[![CI](https://github.com/emmadong521-beep/securities-month-end-recon-agent/actions/workflows/tests.yml/badge.svg)](https://github.com/emmadong521-beep/securities-month-end-recon-agent/actions/workflows/tests.yml)
 ![Tests](https://img.shields.io/badge/tests-33%20passed-brightgreen)
 ![Data Quality](https://img.shields.io/badge/data%20quality-PASS-brightgreen)
 ![Streamlit](https://img.shields.io/badge/streamlit-demo%20ready-ff4b4b)
@@ -50,7 +51,7 @@ python -m src.project_metrics
 6. Open “Agent 工作台”; enter a natural-language task and review the plan, tool calls, observations, final answer, and follow-up response.
 7. Open “可信数据导出” to generate validated revenue, allocated expense, and validation summary files.
 
-Jump to: [Architecture](#architecture) | [Run Locally](#run-locally) | [Agent Workbench](#agent-workbench) | [Data Quality](#data-quality)
+Jump to: [Architecture](#architecture) | [Run Locally](#run-locally) | [Engineering Quality](#engineering-quality) | [Agent Workbench](#agent-workbench) | [Data Quality](#data-quality)
 
 ## Architecture
 
@@ -112,6 +113,35 @@ One-command local launch:
 ```bash
 ./scripts/run_demo.sh
 ```
+
+## Engineering Quality
+
+CI workflow: [`.github/workflows/tests.yml`](.github/workflows/tests.yml)
+
+The GitHub Actions workflow runs on `push` and `pull_request` with Python 3.11 and `LLM_ENABLED=false`. It performs:
+
+- dependency installation with `pip install -e ".[dev]"`
+- synthetic data generation and DuckDB initialization
+- `python -m pytest -q`
+- `python -m pytest --cov=src --cov-report=term-missing --cov-report=xml --cov-report=html`
+- `python -m src.data_quality`
+- upload of `htmlcov` and `coverage.xml` as artifacts
+
+Local commands:
+
+```bash
+python -m pytest -q
+python -m pytest --cov=src --cov-report=term-missing --cov-report=html
+python -m src.data_quality
+make ci
+```
+
+Current local coverage summary: [`data/output/coverage_summary.md`](data/output/coverage_summary.md)
+
+Engineering docs:
+
+- [`docs/design_decisions.md`](docs/design_decisions.md)
+- [`docs/testing_and_quality.md`](docs/testing_and_quality.md)
 
 ## Agent Workbench
 
