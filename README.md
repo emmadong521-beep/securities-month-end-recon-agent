@@ -355,7 +355,7 @@ Optional LLM configuration:
 ```bash
 LLM_ENABLED=true
 LLM_PROVIDER=volcengine
-ARK_API_KEY=your_ark_api_key_here
+ARK_API_KEY=your_key
 ARK_BASE_URL=https://ark.cn-beijing.volces.com/api/coding/v3
 ARK_MODEL=your_model_or_endpoint_id_here
 LLM_TEMPERATURE=0.2

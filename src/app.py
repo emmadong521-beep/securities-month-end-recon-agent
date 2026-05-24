@@ -18,6 +18,15 @@ from src.evidence_chain import build_evidence_chain, format_evidence_chain_markd
 from src.export_validated_data import export_all, export_validation_summary
 from src.llm_client import explain_llm_config_status, is_llm_available, load_llm_config
 from src.severity import grade_all_exceptions, grade_exception
+from src.ui import (
+    format_wan,
+    inject_global_css,
+    render_info_card,
+    render_kpi_card,
+    render_page_header,
+    render_section_title,
+    severity_color,
+)
 from src.validation import (
     detect_reconciliation_exceptions,
     explain_exception_mock,
@@ -29,7 +38,11 @@ from src.validation import (
 
 
 st.set_page_config(page_title="证券公司月结差异归因 Agent", layout="wide")
-st.title("证券公司月结差异归因 Agent")
+inject_global_css()
+render_page_header(
+    "证券公司月结差异归因 Agent",
+    "佣金收入勾稽、费用分摊校验、异常分级、证据链穿透、根因报告",
+)
 
 ensure_database_initialized(force_rebuild=False)
 if st.sidebar.button("重新生成数据"):
@@ -83,6 +96,32 @@ def _agent_steps_view(result) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def _data_quality_status() -> str:
+    report_path = Path(__file__).resolve().parents[1] / "data" / "output" / "data_quality_report.json"
+    if not report_path.exists():
+        return "WARNING"
+    try:
+        return json.loads(report_path.read_text(encoding="utf-8")).get("status", "WARNING")
+    except json.JSONDecodeError:
+        return "WARNING"
+
+
+def _render_trace_timeline(chain: dict) -> None:
+    breakpoint_text = str(chain.get("breakpoint", ""))
+    for step in chain["trace_steps"]:
+        layer = str(step.get("layer", ""))
+        is_breakpoint = layer in breakpoint_text or breakpoint_text in layer
+        render_info_card(
+            f"{step.get('step')} · {layer}",
+            (
+                f"{step.get('description')}。记录数：{step.get('record_count')}；"
+                f"金额：{format_wan(step.get('amount'))}；状态：{'BREAKPOINT' if is_breakpoint else 'OK'}。"
+            ),
+            icon="🔎" if is_breakpoint else "✓",
+            border_color=severity_color("HIGH") if is_breakpoint else "#1F4E79",
+        )
+
+
 TRACE_ICONS = {
     "意图识别": "🎯",
     "制定计划": "📝",
@@ -108,22 +147,23 @@ def _render_trace_payload(payload) -> None:
 
 def _render_explainable_trace(trace) -> None:
     trace_dict = trace.to_dict()
-    st.subheader("可解释分析轨迹")
+    render_section_title("可解释分析轨迹", "🧭")
     st.caption("展示任务理解、分析计划、工具调用轨迹、观察结果、分析判断和综合结论。")
     c1, c2, c3 = st.columns(3)
-    c1.metric("分析步骤数", len(trace.steps))
-    c2.metric("工具调用次数", sum(1 for step in trace.steps if step.tool_name))
-    c3.metric("总耗时", f"{(trace.elapsed_ms or 0) / 1000:.2f}s")
-    with st.container(border=True):
-        st.subheader("最终结论")
-        st.write(trace.final_answer)
+    with c1:
+        render_kpi_card("分析步骤数", str(len(trace.steps)), status="PASS")
+    with c2:
+        render_kpi_card("工具调用次数", str(sum(1 for step in trace.steps if step.tool_name)), status="PASS")
+    with c3:
+        render_kpi_card("总耗时", f"{(trace.elapsed_ms or 0) / 1000:.2f}s", status="PASS")
+    render_info_card("最终结论", trace.final_answer, icon="✅", border_color="#059669")
     st.markdown("**任务输入**")
     st.write(trace.user_task)
     for step in trace.steps:
         step_type = step.step_type.value
         icon = TRACE_ICONS.get(step_type, "•")
         with st.expander(f"{icon} 步骤 {step.step_no}｜{step_type}｜{step.title}", expanded=step.step_type.value == "综合结论"):
-            st.write(step.detail)
+            render_info_card(step.title, step.detail, icon=icon, border_color="#1F4E79")
             if step.tool_name:
                 st.markdown("**工具调用轨迹**")
                 st.json({"tool_name": step.tool_name, "tool_input": step.tool_input or {}})
@@ -143,7 +183,7 @@ def _render_explainable_trace(trace) -> None:
 
 def _recommended_demo_path() -> None:
     with st.container(border=True):
-        st.subheader("推荐演示路径")
+        render_section_title("推荐演示路径", "🧭")
         st.markdown(
             """
 1. 在侧边栏选择 `2025-03`，先看“月结批次概览”确认本月异常数量。
@@ -182,11 +222,19 @@ if page == "月结批次概览":
     _recommended_demo_path()
     rec = reconcile_commission_to_gl(period)
     alloc = reconcile_allocation_result(period)
+    grades = grade_all_exceptions(period)
+    high_count = int((grades["severity"] == "HIGH").sum()) if not grades.empty and "severity" in grades else 0
+    medium_count = int((grades["severity"] == "MEDIUM").sum()) if not grades.empty and "severity" in grades else 0
+    quality_status = _data_quality_status()
     c1, c2, c3, c4 = st.columns(4)
-    c1.metric("佣金批次", len(rec))
-    c2.metric("异常批次", int((rec["status"] == "EXCEPTION").sum()))
-    c3.metric("费用池", len(alloc))
-    c4.metric("异常费用池", int((alloc["status"] == "EXCEPTION").sum()))
+    with c1:
+        render_kpi_card("检测异常数", str(len(exceptions)), status="HIGH" if len(exceptions) else "PASS", help_text=period)
+    with c2:
+        render_kpi_card("HIGH 异常数", str(high_count), status="HIGH" if high_count else "PASS", help_text="收入确认和总账优先")
+    with c3:
+        render_kpi_card("MEDIUM 异常数", str(medium_count), status="MEDIUM" if medium_count else "PASS", help_text="分摊和管理会计影响")
+    with c4:
+        render_kpi_card("数据质量状态", quality_status, status=quality_status, help_text="data_quality_report.json")
     chart_df = pd.DataFrame({"类别": ["佣金异常", "分摊异常"], "数量": [(rec["status"] == "EXCEPTION").sum(), (alloc["status"] == "EXCEPTION").sum()]})
     fig = px.bar(chart_df, x="类别", y="数量", text_auto=True, title="月结异常数量概览")
     fig.update_yaxes(title="数量")
@@ -230,7 +278,26 @@ elif page == "异常清单":
     selected_severity = st.selectbox("严重等级", severity_options)
     if selected_severity != "ALL":
         view = view[view["severity_graded"] == selected_severity]
+    if not view.empty:
+        view = view.copy()
+        view["severity_badge"] = view["severity_graded"].fillna("UNKNOWN")
+        render_section_title("异常分布", "⚠️")
+        cols = st.columns(3)
+        for idx, severity in enumerate(["HIGH", "MEDIUM", "LOW"]):
+            with cols[idx]:
+                render_kpi_card(f"{severity} 异常", str(int((view["severity_badge"] == severity).sum())), status=severity)
     st.dataframe(_amount_view(view), width="stretch")
+    if not view.empty:
+        high_view = view[view["severity_badge"] == "HIGH"].head(3)
+        if not high_view.empty:
+            render_section_title("高风险异常", "🚨")
+            for row in high_view.itertuples():
+                render_info_card(
+                    str(row.exception_id),
+                    f"类型：{row.exception_type}；差异金额：{format_wan(row.diff_amount)}；疑似原因：{row.suspected_reason}",
+                    icon="⚠️",
+                    border_color=severity_color("HIGH"),
+                )
     st.caption("严重等级按影响链路、差异金额和处理优先级生成，用于区分总账风险和管理会计口径风险。")
 
 elif page == "异常详情":
@@ -260,11 +327,13 @@ elif page == "异常证据链":
         exception_id = st.selectbox("异常编号", exceptions["exception_id"].tolist())
         chain = build_evidence_chain(exception_id)
         with st.container(border=True):
-            st.subheader("差异定位结论")
+            render_section_title("差异定位结论", "✅")
             grade = grade_exception(exception_id)
             c1, c2 = st.columns(2)
-            c1.metric("差异金额", f"{chain['diff_amount'] / 10000:,.2f} 万元")
-            c2.metric("严重等级", grade["severity"])
+            with c1:
+                render_kpi_card("差异金额", format_wan(chain["diff_amount"]), status=grade["severity"])
+            with c2:
+                render_kpi_card("严重等级", grade["severity"], status=grade["severity"], help_text=grade["recommended_priority"])
             st.markdown(f"**差异发生层级：** {chain['breakpoint']}")
             st.markdown(f"**根因：** {chain['root_cause']}")
             st.markdown(f"**建议动作：** {chain['recommended_action']}")
@@ -277,7 +346,9 @@ elif page == "异常证据链":
             "diff_amount（万元）": round(chain["diff_amount"] / 10000, 2),
             "trace_key": chain["trace_key"],
         })
-        st.subheader("逐层穿透")
+        render_section_title("逐层穿透 Timeline", "🧩")
+        _render_trace_timeline(chain)
+        st.subheader("逐层穿透明细")
         st.dataframe(_trace_steps_view(chain["trace_steps"]), width="stretch")
         st.subheader("差异发生点")
         st.info(chain["breakpoint"])
@@ -291,7 +362,7 @@ elif page == "异常证据链":
 elif page == "可信数据导出":
     st.subheader("可信数据导出")
     st.caption("导出经过月结校验标记的收入、费用分摊和校验汇总数据，供管理会计分析使用。")
-    if st.button("生成导出文件"):
+    if st.button("生成导出文件", type="primary"):
         paths = export_all()
         st.session_state["validated_export_paths"] = [str(path) for path in paths]
     paths = st.session_state.get("validated_export_paths")
@@ -309,12 +380,12 @@ elif page == "AI / mock 归因报告":
         exception_id = st.selectbox("选择异常", exceptions["exception_id"].tolist())
         report = generate_root_cause_report(exception_id)
         st.markdown(report)
-        if st.button("导出 Markdown 归因报告"):
+        if st.button("导出 Markdown 归因报告", type="primary"):
             output_path = export_root_cause_report(exception_id)
             st.success(f"已导出：{output_path}")
 
 else:
-    st.subheader("Agent 工作台")
+    render_section_title("Agent 工作台", "🤖")
     st.caption("输入自然语言任务，Agent 会自动规划分析步骤、调用现有校验与证据链工具，并展示可追溯的观察结果。")
     llm_config = load_llm_config()
     use_llm = st.checkbox("使用 LLM 增强回答", value=llm_config.enabled)
@@ -334,7 +405,7 @@ else:
     selected_exception = col2.selectbox("异常编号（可选）", exception_options)
     exception_arg = None if selected_exception == "自动识别" else selected_exception
 
-    if st.button("运行 Agent"):
+    if st.button("运行 Agent", type="primary"):
         st.session_state["month_end_agent_use_llm"] = use_llm
         st.session_state["month_end_agent_result"] = run_month_end_agent(user_task, agent_period, exception_arg, use_llm=use_llm)
         st.session_state["month_end_agent_trace"] = run_month_end_agent_with_trace(user_task, agent_period, exception_arg)
@@ -361,15 +432,17 @@ else:
                 st.write(step.observation)
 
         with st.container(border=True):
-            st.subheader("最终分析结论")
+            render_section_title("最终分析结论", "✅")
             if result.severity:
                 c1, c2 = st.columns(2)
-                c1.metric("严重等级", result.severity.get("severity", "UNKNOWN"))
-                c2.metric("处理优先级", result.severity.get("recommended_priority", "待评估"))
+                with c1:
+                    render_kpi_card("严重等级", result.severity.get("severity", "UNKNOWN"), status=result.severity.get("severity", "UNKNOWN"))
+                with c2:
+                    render_kpi_card("处理优先级", result.severity.get("recommended_priority", "待评估"), status=result.severity.get("severity", "UNKNOWN"))
             if result.matched_cases:
                 top_case = result.matched_cases[0]
                 st.caption(f"最高匹配历史案例：{top_case['case_id']}，匹配分数 {top_case['match_score']}。")
-            st.write(result.final_answer)
+            render_info_card("归因结论", result.final_answer, icon="✅", border_color="#059669")
 
         if result.evidence_chain:
             st.subheader("证据链")
