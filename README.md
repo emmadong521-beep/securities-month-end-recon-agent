@@ -203,6 +203,7 @@ The trace shows:
 - observation summaries and key numbers
 - analysis decisions
 - final conclusion and follow-up context
+- downloadable trace JSON for review and replay
 
 This is an analysis trace for business users and reviewers. It is not raw model reasoning. Amount calculation, reconciliation checks, evidence chains, severity grading, and case matching remain deterministic code outputs.
 
