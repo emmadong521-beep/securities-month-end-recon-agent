@@ -66,16 +66,6 @@ After deployment, replace the placeholder Streamlit badge with the deployed app 
 - [Streamlit Deployment](docs/STREAMLIT_DEPLOYMENT.md)
 - [Changelog](CHANGELOG.md)
 
-## Rendering Checks
-
-This README intentionally keeps GitHub-rendered sections as plain multi-line
-Markdown:
-
-- Key Metrics is a normal Markdown table with one metric per row.
-- Architecture diagrams use fenced `mermaid` blocks with `flowchart` on the
-  next line.
-- No generated diagram or table content is stored as a compressed single line.
-
 ## Architecture
 
 ### Data Flow
@@ -86,9 +76,11 @@ flowchart LR
     B --> C["revenue_subledger<br/>收入子账"]
     C --> D["gl_journal<br/>总账凭证"]
     D --> E["gl_balance<br/>总账余额"]
+
     F["expense_pool<br/>费用池"] --> G["allocation_rule<br/>分摊规则"]
     G --> H["allocation_driver<br/>分摊因子"]
     H --> I["allocation_result<br/>分摊结果"]
+
     E --> J["evidence_chain<br/>证据链"]
     I --> J
     J --> K["root_cause_report<br/>根因报告"]
@@ -143,6 +135,92 @@ Financial reconciliation requires reproducible calculations and traceable eviden
 - LLM enhancement is optional and is used only for task understanding, plan wording, conclusion organization, and follow-up responses.
 - If LLM configuration is missing or unavailable, the system falls back to deterministic mode.
 
+## Agent Workbench
+
+The Agent workbench is designed around visible tool orchestration rather than opaque text generation.
+
+It displays:
+
+- User task
+- Generated plan
+- Tool-call trace
+- Observations
+- Evidence chain
+- Severity grading
+- Similar case matching
+- Final root-cause conclusion
+- Follow-up response
+
+The core tools include:
+
+- `detect_reconciliation_exceptions`
+- `grade_exception`
+- `build_evidence_chain`
+- `match_root_cause_cases`
+- `generate_root_cause_report`
+
+## Exception Severity
+
+`src/severity.py` assigns `HIGH / MEDIUM / LOW` based on amount, affected layer, and exception type.
+
+Typical grading logic:
+
+- `HIGH`: revenue recognition, GL posting, duplicate posting, or short-posting issues that may affect financial statement amounts.
+- `MEDIUM`: allocation ratio, allocation rule version, or allocation driver issues that affect management accounting views.
+- `LOW`: small mapping or display-level issues that do not materially affect the monthly close result.
+
+## Historical Case Matching
+
+`src/case_matcher.py` matches exceptions to the `root_cause_case` table using deterministic scoring across:
+
+- scenario
+- exception type
+- suspected reason
+- evidence-chain breakpoint
+
+The matching result helps the Agent reuse prior root-cause patterns without letting the LLM invent unsupported explanations.
+
+## Validated Data Export
+
+```bash
+.venv/bin/python -m src.export_validated_data
+```
+
+Outputs:
+
+- `data/output/validated_actual_revenue.csv`
+- `data/output/validated_allocated_expense.csv`
+- `data/output/validation_summary.csv`
+
+These files demonstrate how month-end validated data can feed downstream management accounting analysis.
+
+## Volcengine Ark LLM Integration
+
+Copy the environment template:
+
+```bash
+cp .env.example .env
+```
+
+Configure `.env`:
+
+```bash
+LLM_ENABLED=true
+LLM_PROVIDER=volcengine
+ARK_API_KEY=your_ark_api_key_here
+ARK_BASE_URL=https://ark.cn-beijing.volces.com/api/coding/v3
+ARK_MODEL=your_model_or_endpoint_id_here
+LLM_TEMPERATURE=0.2
+LLM_TIMEOUT_SECONDS=60
+```
+
+Notes:
+
+- `ARK_MODEL` should be replaced with the actual Model ID from the Volcengine Ark console.
+- Do not commit `.env`; it is ignored by `.gitignore`.
+- If the key or model is not configured, the app automatically uses deterministic mode.
+- LLM is used for task understanding and natural-language expression only. Reconciliation, evidence, severity, and amount calculations remain local code outputs.
+
 ## Engineering Quality
 
 CI workflow: [`.github/workflows/tests.yml`](.github/workflows/tests.yml)
@@ -172,6 +250,17 @@ Outputs:
 - `data/output/data_quality_report.md`
 - `data/output/data_quality_report.json`
 
+The report covers:
+
+- row counts
+- primary-key uniqueness
+- foreign-key integrity
+- amount null checks
+- reconciliation checks
+- seeded demo exception detection
+- public aggregate calibration
+- final `PASS / WARNING / FAIL` status
+
 ## Core Tables
 
 - `chart_of_accounts`
@@ -190,6 +279,16 @@ Outputs:
 - `interface_batch_log`
 - `reconciliation_exception`
 - `root_cause_case`
+
+## Seeded Demo Scenarios
+
+- `2025-03`: brokerage commission batch not recognized into revenue subledger.
+- `2025-04`: revenue subledger recognized, GL voucher short-posted.
+- `2025-05`: duplicate GL posting.
+- `2025-09` / `2025-10`: wealth-management distribution revenue mapped to brokerage commission account.
+- `2025-06`: allocation ratio sum below 100%.
+- `2025-07`: stale allocation rule version used.
+- `2025-08`: missing branch allocation driver.
 
 ## Future Extensions
 
