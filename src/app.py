@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict
+import json
 import sys
 from pathlib import Path
 
@@ -10,7 +11,7 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 
-from src.agent import answer_month_end_followup, run_month_end_agent
+from src.agent import answer_month_end_followup, run_month_end_agent, run_month_end_agent_with_trace
 from src.case_matcher import format_matched_cases_markdown, match_root_cause_cases
 from src.db import ensure_database_initialized, rebuild_database
 from src.evidence_chain import build_evidence_chain, format_evidence_chain_markdown
@@ -80,6 +81,64 @@ def _agent_steps_view(result) -> pd.DataFrame:
         row["tool_input"] = str(row["tool_input"])
         rows.append(row)
     return pd.DataFrame(rows)
+
+
+TRACE_ICONS = {
+    "意图识别": "🎯",
+    "制定计划": "📝",
+    "工具调用": "🔧",
+    "观察结果": "👁️",
+    "分析判断": "🧠",
+    "综合结论": "✅",
+}
+
+
+def _render_trace_payload(payload) -> None:
+    if isinstance(payload, dict) and payload.get("type") == "DataFrame":
+        st.json({key: value for key, value in payload.items() if key != "preview"})
+        if payload.get("preview"):
+            st.dataframe(pd.DataFrame(payload["preview"]), width="stretch")
+    elif isinstance(payload, dict) and payload.get("type") == "list":
+        st.json({key: value for key, value in payload.items() if key != "preview"})
+        if payload.get("preview"):
+            st.json(payload["preview"])
+    elif payload is not None:
+        st.json(payload)
+
+
+def _render_explainable_trace(trace) -> None:
+    trace_dict = trace.to_dict()
+    st.subheader("可解释分析轨迹")
+    st.caption("展示任务理解、分析计划、工具调用轨迹、观察结果、分析判断和综合结论。")
+    c1, c2, c3 = st.columns(3)
+    c1.metric("分析步骤数", len(trace.steps))
+    c2.metric("工具调用次数", sum(1 for step in trace.steps if step.tool_name))
+    c3.metric("总耗时", f"{(trace.elapsed_ms or 0) / 1000:.2f}s")
+    with st.container(border=True):
+        st.subheader("最终结论")
+        st.write(trace.final_answer)
+    st.markdown("**任务输入**")
+    st.write(trace.user_task)
+    for step in trace.steps:
+        step_type = step.step_type.value
+        icon = TRACE_ICONS.get(step_type, "•")
+        with st.expander(f"{icon} 步骤 {step.step_no}｜{step_type}｜{step.title}", expanded=step.step_type.value == "综合结论"):
+            st.write(step.detail)
+            if step.tool_name:
+                st.markdown("**工具调用轨迹**")
+                st.json({"tool_name": step.tool_name, "tool_input": step.tool_input or {}})
+            if step.result_summary is not None:
+                st.markdown("**观察结果**")
+                _render_trace_payload(step.result_summary)
+            if step.key_numbers:
+                st.markdown("**关键数字**")
+                st.json(step.key_numbers)
+    st.download_button(
+        "下载 trace JSON",
+        data=json.dumps(trace_dict, ensure_ascii=False, indent=2, default=str),
+        file_name="month_end_agent_trace.json",
+        mime="application/json",
+    )
 
 
 def _recommended_demo_path() -> None:
@@ -278,11 +337,15 @@ else:
     if st.button("运行 Agent"):
         st.session_state["month_end_agent_use_llm"] = use_llm
         st.session_state["month_end_agent_result"] = run_month_end_agent(user_task, agent_period, exception_arg, use_llm=use_llm)
+        st.session_state["month_end_agent_trace"] = run_month_end_agent_with_trace(user_task, agent_period, exception_arg)
 
     result = st.session_state.get("month_end_agent_result")
     if result:
         if result.llm_error:
             st.warning(result.llm_error)
+        trace = st.session_state.get("month_end_agent_trace")
+        if trace:
+            _render_explainable_trace(trace)
         st.subheader("Agent 分析计划")
         for idx, item in enumerate(result.plan, start=1):
             st.markdown(f"{idx}. {item}")

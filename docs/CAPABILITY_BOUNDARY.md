@@ -73,3 +73,4 @@ The data does not represent any real company’s internal operating records.
 - Similar case matching is deterministic scoring, not a full vector RAG system.
 - LLM enhances task understanding and explanation only.
 - The workflow focuses on selected reconciliation scenarios rather than the full month-end close process.
+- The project exposes tool-call and analysis traces, not raw model reasoning.

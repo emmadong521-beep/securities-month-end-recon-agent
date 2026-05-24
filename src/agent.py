@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import re
 import json
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
 import pandas as pd
 
+from .agent_trace import ReasoningTrace, StepType
 from .case_matcher import match_root_cause_cases
 from .evidence_chain import build_evidence_chain
 from .llm_client import call_llm, is_llm_available
@@ -451,6 +453,172 @@ def run_month_end_agent(
             llm_mode = "Mock Agent"
             final = mock_final
     return AgentResult(user_task, plan, steps, final, evidence_chain, report_path, llm_mode, llm_error, severity, matched_cases)
+
+
+def run_month_end_agent_with_trace(
+    user_task: str,
+    period: str | None = None,
+    exception_id: str | None = None,
+) -> ReasoningTrace:
+    started = time.perf_counter()
+    available_periods = [f"2025-{m:02d}" for m in range(1, 13)]
+    selected_period = _extract_period(user_task, period)
+    if selected_period not in available_periods:
+        selected_period = "2025-03"
+    selected_exception_id = _extract_exception_id(user_task, exception_id)
+    scenario = _scenario_from_task(user_task)
+    intent = _intent_from_scenario(scenario, selected_exception_id)
+    task_context = {
+        "intent": intent,
+        "period": selected_period,
+        "exception_id": selected_exception_id,
+        "scenario": scenario,
+        "focus": "定位月结异常断点、严重等级、历史案例和建议动作",
+    }
+    trace = ReasoningTrace(user_task=user_task, intent=intent, period=selected_period)
+    trace.add_step(
+        StepType.INTENT_RECOGNITION,
+        "识别任务意图",
+        "解析用户输入中的期间、异常编号和排查场景。",
+        result=task_context,
+    )
+
+    plan = _fallback_plan(task_context)
+    trace.add_step(
+        StepType.PLAN_GENERATION,
+        "制定排查计划",
+        "根据任务类型选择先查异常清单、再做证据链、分级、案例匹配和报告生成的路径。",
+        result={"plan": plan, "expected_tools": [item for item in TOOL_REGISTRY]},
+    )
+
+    exceptions = detect_reconciliation_exceptions(selected_period)
+    trace.add_step(
+        StepType.TOOL_CALL,
+        "查询期间异常清单",
+        "获取候选异常，作为后续选择和下钻对象。",
+        tool_name="detect_reconciliation_exceptions",
+        tool_input={"period": selected_period},
+        result=exceptions,
+    )
+    trace.add_step(
+        StepType.OBSERVATION,
+        "观察异常分布",
+        f"期间 {selected_period} 检测到 {len(exceptions)} 条异常。",
+        result=exceptions,
+    )
+
+    if not selected_exception_id:
+        selected = _select_exception(exceptions, scenario)
+        if selected is None:
+            trace.final_answer = f"{selected_period} 未检测到符合任务类型的异常。"
+            trace.add_step(
+                StepType.CONCLUSION,
+                "综合结论",
+                trace.final_answer,
+                result={"final_answer": trace.final_answer},
+            )
+            trace.elapsed_ms = round((time.perf_counter() - started) * 1000, 2)
+            return trace
+        selected_exception_id = str(selected["exception_id"])
+        trace.add_step(
+            StepType.ANALYSIS_DECISION,
+            "选择下钻异常",
+            (
+                f"按场景 {scenario} 和差异绝对值选择异常 {selected_exception_id}，"
+                f"差异金额 {_format_amount(float(selected['diff_amount']))}。"
+            ),
+            result=selected.to_dict(),
+        )
+
+    evidence_chain = build_evidence_chain(selected_exception_id)
+    trace.add_step(
+        StepType.TOOL_CALL,
+        "构建证据链",
+        "逐层穿透源系统、子账、总账或费用分摊链路。",
+        tool_name="build_evidence_chain",
+        tool_input={"exception_id": selected_exception_id},
+        result=evidence_chain,
+    )
+    trace.add_step(
+        StepType.OBSERVATION,
+        "定位差异发生层级",
+        (
+            f"证据链包含 {len(evidence_chain['trace_steps'])} 个层级，"
+            f"差异发生在 {evidence_chain['breakpoint']}。"
+        ),
+        result=evidence_chain,
+    )
+
+    severity = grade_exception(selected_exception_id)
+    trace.add_step(
+        StepType.TOOL_CALL,
+        "评定异常严重等级",
+        "按差异金额、影响链路和异常类型评估优先级。",
+        tool_name="grade_exception",
+        tool_input={"exception_id": selected_exception_id},
+        result=severity,
+    )
+    trace.add_step(
+        StepType.ANALYSIS_DECISION,
+        "形成风险判断",
+        (
+            f"异常被评为 {severity['severity']}，影响层级为 {severity['affected_layer']}，"
+            f"人工复核要求为 {severity['requires_manual_review']}。"
+        ),
+        result=severity,
+    )
+
+    matched_cases = match_root_cause_cases(selected_exception_id, top_k=3)
+    trace.add_step(
+        StepType.TOOL_CALL,
+        "匹配历史案例",
+        "用异常类型、症状和断点匹配 root_cause_case 中的相似案例。",
+        tool_name="match_root_cause_cases",
+        tool_input={"exception_id": selected_exception_id, "top_k": 3},
+        result=matched_cases,
+    )
+    trace.add_step(
+        StepType.OBSERVATION,
+        "观察案例匹配结果",
+        f"匹配到 {len(matched_cases)} 条相似案例。",
+        result=matched_cases,
+    )
+
+    report = generate_root_cause_report(selected_exception_id)
+    trace.add_step(
+        StepType.TOOL_CALL,
+        "生成归因报告",
+        "将证据链、异常分级和案例匹配结果组织成可复核报告。",
+        tool_name="generate_root_cause_report",
+        tool_input={"exception_id": selected_exception_id},
+        result={"report_length": len(report), "report_preview": report[:500]},
+    )
+
+    final_answer = _enhanced_final_answer(selected_exception_id, evidence_chain, severity, matched_cases, None)
+    trace.final_answer = final_answer
+    trace.metadata = {
+        "exception_id": selected_exception_id,
+        "evidence_chain": evidence_chain,
+        "severity": severity,
+        "matched_cases": matched_cases,
+    }
+    trace.add_step(
+        StepType.CONCLUSION,
+        "综合结论",
+        final_answer,
+        result={
+            "exception_id": selected_exception_id,
+            "period": evidence_chain["period"],
+            "diff_amount": evidence_chain["diff_amount"],
+            "breakpoint": evidence_chain["breakpoint"],
+            "severity": severity.get("severity"),
+            "matched_case_count": len(matched_cases),
+            "root_cause": evidence_chain["root_cause"],
+            "recommended_action": evidence_chain["recommended_action"],
+        },
+    )
+    trace.elapsed_ms = round((time.perf_counter() - started) * 1000, 2)
+    return trace
 
 
 def answer_month_end_followup(question: str, context: AgentResult, use_llm: bool | None = None) -> str:

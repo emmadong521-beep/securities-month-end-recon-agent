@@ -190,6 +190,22 @@ All detailed customer, trade, voucher, branch, cost pool, and allocation data is
 
 ---
 
+## Explainable Agent Trace（可解释分析轨迹）
+
+The Agent Workbench exposes an Explainable Agent Trace（可解释分析轨迹）for each run.
+
+The trace shows:
+
+- natural-language task input
+- intent recognition
+- generated analysis plan
+- Tool-call Trace with tool names and inputs
+- observation summaries and key numbers
+- analysis decisions
+- final conclusion and follow-up context
+
+This is an analysis trace for business users and reviewers. It is not raw model reasoning. Amount calculation, reconciliation checks, evidence chains, severity grading, and case matching remain deterministic code outputs.
+
 ## Agent Workbench
 
 The Agent workbench is designed around visible tool orchestration rather than opaque text generation.
