@@ -214,3 +214,10 @@ def format_wan(amount) -> str:
         return f"{float(amount) / 10000:,.2f} 万元"
     except (TypeError, ValueError):
         return "N/A"
+
+
+def format_pct(value) -> str:
+    try:
+        return f"{float(value):.2%}"
+    except (TypeError, ValueError):
+        return "N/A"

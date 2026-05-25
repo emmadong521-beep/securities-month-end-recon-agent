@@ -1,0 +1,11 @@
+pandas>=2.2.0
+numpy>=1.26.0
+duckdb>=1.0.0
+openpyxl>=3.1.0
+pydantic>=2.7.0
+streamlit>=1.35.0
+plotly>=5.22.0
+python-dotenv>=1.0.0
+PyYAML>=6.0.0
+pypdf>=4.2.0
+openai>=1.0.0
