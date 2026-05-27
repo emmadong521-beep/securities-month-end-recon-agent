@@ -6,18 +6,27 @@ import duckdb
 import numpy as np
 import pandas as pd
 
-from .config import DB_PATH, OUTPUT_DIR, SYNTHETIC_DIR
-from .db import load_synthetic_data_to_duckdb
+from .config import DB_PATH, OUTPUT_DIR
+from .db import EXPECTED_TABLE_COLUMNS, database_exists_and_valid, ensure_database_initialized, get_connection
 
 
 def _table(table: str) -> pd.DataFrame:
-    if not Path(DB_PATH).exists():
-        load_synthetic_data_to_duckdb()
-    con = duckdb.connect(str(DB_PATH))
+    if not database_exists_and_valid(DB_PATH):
+        ensure_database_initialized(force_rebuild=True)
+    con = get_connection(DB_PATH)
     try:
-        return con.execute(f"SELECT * FROM {table}").fetchdf()
+        df = con.execute(f"SELECT * FROM {table}").fetchdf()
     finally:
         con.close()
+    expected_columns = EXPECTED_TABLE_COLUMNS.get(table)
+    if expected_columns:
+        missing_columns = sorted(expected_columns.difference(df.columns))
+        if missing_columns:
+            raise RuntimeError(
+                f"DuckDB table '{table}' is missing required columns: {missing_columns}. "
+                "Run ensure_database_initialized(force_rebuild=True) to rebuild the demo database."
+            )
+    return df
 
 
 def reconcile_commission_to_gl(period: str) -> pd.DataFrame:

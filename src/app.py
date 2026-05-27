@@ -13,7 +13,7 @@ import plotly.express as px
 
 from src.agent import answer_month_end_followup, run_month_end_agent, run_month_end_agent_with_trace
 from src.case_matcher import format_matched_cases_markdown, match_root_cause_cases
-from src.db import ensure_database_initialized, rebuild_database
+from src.db import ensure_database_initialized
 from src.evidence_chain import build_evidence_chain, format_evidence_chain_markdown
 from src.export_validated_data import export_all, export_validation_summary
 from src.llm_client import explain_llm_config_status, is_llm_available, load_llm_config
@@ -45,8 +45,8 @@ render_page_header(
 )
 
 ensure_database_initialized(force_rebuild=False)
-if st.sidebar.button("重新生成数据"):
-    rebuild_database()
+if st.sidebar.button("重新生成演示数据"):
+    ensure_database_initialized(force_rebuild=True)
     st.sidebar.success("数据和 DuckDB 已重新生成。")
 period = st.sidebar.selectbox("会计期间", [f"2025-{m:02d}" for m in range(1, 13)], index=2)
 page = st.sidebar.radio(

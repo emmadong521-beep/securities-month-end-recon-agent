@@ -10,6 +10,12 @@ htmlcov/
 *.egg-info/
 *.duckdb
 *.duckdb.wal
+data/output/*.duckdb
+data/output/*.duckdb.wal
+data/output/*.db
+data/output/*.db.wal
+*.db
+*.db.wal
 data/output/*
 !data/output/.gitkeep
 !data/output/coverage_summary.md
