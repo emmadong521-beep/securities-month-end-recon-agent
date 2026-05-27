@@ -19,9 +19,43 @@ class LLMConfig:
     model: str
     temperature: float
     timeout_seconds: int
+    api_key_field: str
+    base_url_field: str
+    model_field: str
 
 
-PLACEHOLDER_KEYS = {"", "your_ark_api_key_here", "changeme", "placeholder", "replace_me"}
+PROVIDER_SETTINGS = {
+    "volcengine": {
+        "api_key_field": "ARK_API_KEY",
+        "base_url_field": "ARK_BASE_URL",
+        "model_field": "ARK_MODEL",
+        "default_base_url": "https://ark.cn-beijing.volces.com/api/coding/v3",
+        "default_model": "your_model_or_endpoint_id_here",
+        "mode": "Volcengine Ark LLM Agent",
+        "message": "LLM 配置完整，可使用火山方舟增强模式。",
+    },
+    "deepseek": {
+        "api_key_field": "DEEPSEEK_API_KEY",
+        "base_url_field": "DEEPSEEK_BASE_URL",
+        "model_field": "DEEPSEEK_MODEL",
+        "default_base_url": "https://api.deepseek.com",
+        "default_model": "deepseek-v4-flash",
+        "mode": "DeepSeek LLM Agent",
+        "message": "LLM 配置完整，可使用 DeepSeek 增强模式。",
+    },
+}
+
+PLACEHOLDER_KEYS = {
+    "",
+    "your_key",
+    "your_key_here",
+    "your_ark_api_key_here",
+    "your_deepseek_api_key_here",
+    "changeme",
+    "placeholder",
+    "replace_me",
+}
+PLACEHOLDER_MODELS = {"", "your_model_or_endpoint_id_here", "your_model_id_here"}
 
 
 class LLMCallError(RuntimeError):
@@ -52,9 +86,36 @@ def _as_bool(value: str | None) -> bool:
     return str(value or "").strip().lower() in {"1", "true", "yes", "y", "on"}
 
 
+def _secret_value(key: str) -> str | None:
+    try:
+        import streamlit as st
+
+        value = st.secrets.get(key)  # type: ignore[attr-defined]
+        if value is None:
+            return None
+        return str(value)
+    except Exception:
+        return None
+
+
+def _setting(key: str, default: str | None = None) -> str | None:
+    env_value = os.getenv(key)
+    if env_value is not None and str(env_value).strip() != "":
+        return str(env_value)
+    secret = _secret_value(key)
+    if secret is not None and str(secret).strip() != "":
+        return str(secret)
+    return default
+
+
 def _is_placeholder(api_key: str | None) -> bool:
-    normalized = (api_key or "").strip()
-    return normalized.lower() in PLACEHOLDER_KEYS
+    normalized = (api_key or "").strip().lower()
+    return normalized in PLACEHOLDER_KEYS
+
+
+def _is_placeholder_model(model: str | None) -> bool:
+    normalized = (model or "").strip().lower()
+    return normalized in PLACEHOLDER_MODELS
 
 
 def _safe_float(value: str | None, default: float) -> float:
@@ -80,14 +141,22 @@ def _sanitize_summary(summary: str, api_key: str | None) -> str:
 
 def load_llm_config() -> LLMConfig:
     load_dotenv(dotenv_path=PROJECT_ROOT / ".env", override=False)
+    provider = (_setting("LLM_PROVIDER", "volcengine") or "volcengine").strip().lower()
+    provider_meta = PROVIDER_SETTINGS.get(provider, PROVIDER_SETTINGS["volcengine"])
+    api_key_field = provider_meta["api_key_field"]
+    base_url_field = provider_meta["base_url_field"]
+    model_field = provider_meta["model_field"]
     return LLMConfig(
-        enabled=_as_bool(os.getenv("LLM_ENABLED", "false")),
-        provider=os.getenv("LLM_PROVIDER", "volcengine").strip(),
-        api_key=(os.getenv("ARK_API_KEY") or "").strip() or None,
-        base_url=os.getenv("ARK_BASE_URL", "https://ark.cn-beijing.volces.com/api/coding/v3").strip(),
-        model=os.getenv("ARK_MODEL", "your_model_or_endpoint_id_here").strip(),
-        temperature=_safe_float(os.getenv("LLM_TEMPERATURE", "0.2"), 0.2),
-        timeout_seconds=_safe_int(os.getenv("LLM_TIMEOUT_SECONDS", "60"), 60),
+        enabled=_as_bool(_setting("LLM_ENABLED", "false")),
+        provider=provider,
+        api_key=(_setting(api_key_field, "") or "").strip() or None,
+        base_url=(_setting(base_url_field, provider_meta["default_base_url"]) or "").strip(),
+        model=(_setting(model_field, provider_meta["default_model"]) or "").strip(),
+        temperature=_safe_float(_setting("LLM_TEMPERATURE", "0.2"), 0.2),
+        timeout_seconds=_safe_int(_setting("LLM_TIMEOUT_SECONDS", "60"), 60),
+        api_key_field=api_key_field,
+        base_url_field=base_url_field,
+        model_field=model_field,
     )
 
 
@@ -97,21 +166,36 @@ def is_llm_available() -> bool:
 
 def explain_llm_config_status() -> dict:
     config = load_llm_config()
-    missing_fields = []
     if not config.enabled:
-        missing_fields.append("LLM_ENABLED")
-    if config.provider.lower() != "volcengine":
+        return {
+            "available": False,
+            "mode": "Deterministic Agent Mode",
+            "provider": config.provider,
+            "base_url": config.base_url,
+            "model": config.model,
+            "missing_fields": [],
+            "message": "LLM_ENABLED=false，当前使用确定性 Agent 模式。",
+            "api_key_configured": bool(config.api_key and not _is_placeholder(config.api_key)),
+        }
+
+    missing_fields = []
+    provider_meta = PROVIDER_SETTINGS.get(config.provider)
+    if provider_meta is None:
         missing_fields.append("LLM_PROVIDER")
     if not config.api_key or _is_placeholder(config.api_key):
-        missing_fields.append("ARK_API_KEY")
+        missing_fields.append(config.api_key_field)
     if not config.base_url:
-        missing_fields.append("ARK_BASE_URL")
-    if not config.model:
-        missing_fields.append("ARK_MODEL")
+        missing_fields.append(config.base_url_field)
+    if not config.model or _is_placeholder_model(config.model):
+        missing_fields.append(config.model_field)
 
     available = not missing_fields
-    mode = "Volcengine Ark LLM Agent" if available else "Mock Agent"
-    message = "LLM 配置完整，可使用火山方舟增强模式。" if available else f"LLM 配置不完整，缺失或无效字段：{', '.join(missing_fields)}。"
+    mode = provider_meta["mode"] if available and provider_meta else "Deterministic Agent Mode"
+    message = (
+        provider_meta["message"]
+        if available and provider_meta
+        else f"LLM 配置不完整，缺失或无效字段：{', '.join(missing_fields)}。"
+    )
     return {
         "available": available,
         "mode": mode,
