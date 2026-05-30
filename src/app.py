@@ -19,12 +19,15 @@ from src.export_validated_data import export_all, export_validation_summary
 from src.llm_client import explain_llm_config_status, is_llm_available, load_llm_config
 from src.severity import grade_all_exceptions, grade_exception
 from src.ui import (
+    apply_plotly_theme,
     format_wan,
     inject_global_css,
+    render_agent_step_card,
     render_info_card,
     render_kpi_card,
     render_page_header,
     render_section_title,
+    render_timeline_step,
     severity_color,
 )
 from src.validation import (
@@ -111,14 +114,14 @@ def _render_trace_timeline(chain: dict) -> None:
     for step in chain["trace_steps"]:
         layer = str(step.get("layer", ""))
         is_breakpoint = layer in breakpoint_text or breakpoint_text in layer
-        render_info_card(
+        render_timeline_step(
             f"{step.get('step')} · {layer}",
             (
                 f"{step.get('description')}。记录数：{step.get('record_count')}；"
                 f"金额：{format_wan(step.get('amount'))}；状态：{'BREAKPOINT' if is_breakpoint else 'OK'}。"
             ),
+            is_breakpoint=is_breakpoint,
             icon="🔎" if is_breakpoint else "✓",
-            border_color=severity_color("HIGH") if is_breakpoint else "#1F4E79",
         )
 
 
@@ -163,7 +166,7 @@ def _render_explainable_trace(trace) -> None:
         step_type = step.step_type.value
         icon = TRACE_ICONS.get(step_type, "•")
         with st.expander(f"{icon} 步骤 {step.step_no}｜{step_type}｜{step.title}", expanded=step.step_type.value == "综合结论"):
-            render_info_card(step.title, step.detail, icon=icon, border_color="#1F4E79")
+            render_agent_step_card(step.title, step.detail, icon=icon, border_color="#1F4E79")
             if step.tool_name:
                 st.markdown("**工具调用轨迹**")
                 st.json({"tool_name": step.tool_name, "tool_input": step.tool_input or {}})
@@ -240,7 +243,7 @@ if page == "月结批次概览":
     chart_df = pd.DataFrame({"类别": ["佣金异常", "分摊异常"], "数量": [(rec["status"] == "EXCEPTION").sum(), (alloc["status"] == "EXCEPTION").sum()]})
     fig = px.bar(chart_df, x="类别", y="数量", text_auto=True, title="月结异常数量概览")
     fig.update_yaxes(title="数量")
-    st.plotly_chart(fig, width="stretch")
+    st.plotly_chart(apply_plotly_theme(fig), width="stretch")
     st.caption("先用异常数量判断本月月结风险，再进入明细页面定位具体批次。")
 
 elif page == "经纪佣金收入勾稽检查":
@@ -261,7 +264,7 @@ elif page == "经纪佣金收入勾稽检查":
         title="经纪佣金收入链路勾稽（万元）",
     )
     fig.update_yaxes(title="金额（万元）")
-    st.plotly_chart(fig, width="stretch")
+    st.plotly_chart(apply_plotly_theme(fig), width="stretch")
     st.caption("三组金额应逐层一致；任一营业部柱形不齐即提示收入确认或入账链路需要复核。")
 
 elif page == "费用分摊准确性检查":
@@ -270,7 +273,7 @@ elif page == "费用分摊准确性检查":
     plot_df = alloc.assign(**{"费用池金额（万元）": alloc["amount"] / 10000, "已分摊金额（万元）": alloc["allocated_amount"] / 10000})
     fig = px.bar(plot_df, x="pool_id", y=["费用池金额（万元）", "已分摊金额（万元）"], barmode="group", title="费用池与分摊结果比对（万元）")
     fig.update_yaxes(title="金额（万元）")
-    st.plotly_chart(fig, width="stretch")
+    st.plotly_chart(apply_plotly_theme(fig), width="stretch")
     st.caption("费用池金额应被完整分摊；缺口通常来自比例不满、规则版本错误或分摊因子缺失。")
 
 elif page == "异常清单":

@@ -5,6 +5,16 @@ from html import escape
 import streamlit as st
 
 
+PLOTLY_LAYOUT = {
+    "paper_bgcolor": "rgba(0,0,0,0)",
+    "plot_bgcolor": "rgba(0,0,0,0)",
+    "font": {"color": "#1F2937", "family": "Arial, sans-serif"},
+    "title": {"font": {"size": 18, "color": "#163b5c"}},
+    "legend": {"orientation": "h", "yanchor": "bottom", "y": 1.02, "xanchor": "right", "x": 1},
+    "margin": {"l": 20, "r": 20, "t": 60, "b": 35},
+}
+
+
 def inject_global_css() -> None:
     st.markdown(
         """
@@ -12,10 +22,19 @@ def inject_global_css() -> None:
         .block-container {
             padding-top: 1.4rem;
             padding-bottom: 2.5rem;
+            max-width: 1440px;
+        }
+        .stApp {
+            background: #F7F9FC;
         }
         [data-testid="stSidebar"] {
             background: #ffffff;
             border-right: 1px solid #e5e7eb;
+        }
+        [data-testid="stSidebar"] [data-testid="stRadio"] label,
+        [data-testid="stSidebar"] [data-testid="stSelectbox"] label {
+            color: #163b5c;
+            font-weight: 700;
         }
         .finance-header {
             padding: 1.35rem 1.5rem;
@@ -57,6 +76,7 @@ def inject_global_css() -> None:
             font-size: 1.65rem;
             font-weight: 760;
             margin-top: 0.25rem;
+            line-height: 1.18;
         }
         .kpi-delta {
             color: #4b5563;
@@ -107,6 +127,18 @@ def inject_global_css() -> None:
             border-left: 4px solid #1F4E79;
             margin-bottom: 0.6rem;
         }
+        .agent-step-card h4,
+        .timeline-step h4 {
+            margin: 0 0 0.3rem 0;
+            color: #163b5c;
+            font-size: 0.98rem;
+        }
+        .agent-step-card p,
+        .timeline-step p {
+            margin: 0;
+            color: #374151;
+            line-height: 1.5;
+        }
         .timeline-step {
             padding: 0.85rem 1rem;
             border-radius: 10px;
@@ -126,6 +158,25 @@ def inject_global_css() -> None:
             border-radius: 12px;
             padding: 0.8rem 1rem;
             box-shadow: 0 8px 22px rgba(15, 23, 42, 0.05);
+        }
+        div[data-testid="stDataFrame"] {
+            border: 1px solid #e5e7eb;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 6px 18px rgba(15, 23, 42, 0.04);
+        }
+        div[data-testid="stExpander"] {
+            border: 1px solid #e5e7eb;
+            border-radius: 10px;
+            background: #ffffff;
+            box-shadow: 0 6px 18px rgba(15, 23, 42, 0.04);
+        }
+        .stButton > button,
+        .stDownloadButton > button {
+            border-radius: 10px;
+            border: 1px solid #1F4E79;
+            box-shadow: 0 6px 16px rgba(31, 78, 121, 0.12);
+            font-weight: 700;
         }
         </style>
         """,
@@ -207,6 +258,38 @@ def render_info_card(title: str, body: str, icon: str | None = None, border_colo
         ),
         unsafe_allow_html=True,
     )
+
+
+def render_agent_step_card(title: str, body: str, icon: str | None = None, border_color: str = "#1F4E79") -> None:
+    prefix = f"{icon} " if icon else ""
+    st.markdown(
+        (
+            f'<div class="agent-step-card" style="border-left-color:{border_color};">'
+            f"<h4>{escape(prefix + title)}</h4><p>{escape(body)}</p></div>"
+        ),
+        unsafe_allow_html=True,
+    )
+
+
+def render_timeline_step(
+    title: str,
+    body: str,
+    is_breakpoint: bool = False,
+    icon: str | None = None,
+) -> None:
+    prefix = f"{icon} " if icon else ""
+    class_name = "timeline-step breakpoint" if is_breakpoint else "timeline-step"
+    st.markdown(
+        f'<div class="{class_name}"><h4>{escape(prefix + title)}</h4><p>{escape(body)}</p></div>',
+        unsafe_allow_html=True,
+    )
+
+
+def apply_plotly_theme(fig):
+    fig.update_layout(**PLOTLY_LAYOUT)
+    fig.update_xaxes(showgrid=True, gridcolor="#E5E7EB", zerolinecolor="#CBD5E1")
+    fig.update_yaxes(showgrid=True, gridcolor="#E5E7EB", zerolinecolor="#CBD5E1")
+    return fig
 
 
 def format_wan(amount) -> str:
